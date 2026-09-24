@@ -7,14 +7,11 @@ import logging
 import requests
 
 from .config import JiraConfig
+from .exceptions import JiraClientError
 
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 10
-
-
-class JiraClientError(RuntimeError):
-    """Raised when a Jira API call fails."""
 
 
 class JiraClient:

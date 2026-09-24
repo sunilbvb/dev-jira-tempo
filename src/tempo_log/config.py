@@ -1,13 +1,11 @@
-"""Environment-based configuration for Tempo/Jira access."""
+"""Configuration models and loaders for Tempo/Jira access."""
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
 
-
-class ConfigError(RuntimeError):
-    """Raised when required configuration is missing or invalid."""
+from .exceptions import ConfigError
 
 
 @dataclass(frozen=True)
@@ -20,11 +18,17 @@ class JiraConfig:
 @dataclass(frozen=True)
 class Settings:
     tempo_api_token: str
-    jira: JiraConfig | None
-    default_account_id: str | None
+    jira: JiraConfig | None = None
+    default_account_id: str | None = None
+
+    @classmethod
+    def from_env(cls) -> Settings:
+        """Load settings from environment variables."""
+        return load_settings()
 
 
 def load_settings() -> Settings:
+    """Load configuration from environment variables."""
     tempo_token = os.environ.get("TEMPO_API_TOKEN")
     if not tempo_token:
         raise ConfigError("TEMPO_API_TOKEN environment variable is not set.")

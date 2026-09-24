@@ -143,6 +143,40 @@ tempo-log batch worklogs.json --stop-on-error
 
 ---
 
+## Python SDK / Library Usage (For Other Apps)
+
+`tempo_log` can be directly imported and integrated into Slack bots, web backends (FastAPI/Flask), desktop tray apps, or background scripts:
+
+```python
+from tempo_log import TempoService, JiraConfig, Settings, MemoryJournal
+
+# 1. Programmatic initialization (or use TempoService.from_settings(Settings.from_env()))
+service = TempoService(
+    tempo_token="your-tempo-token",
+    jira_config=JiraConfig(
+        base_url="https://yourcompany.atlassian.net",
+        email="you@company.com",
+        api_token="your-jira-api-token",
+    ),
+    default_account_id="557058:abc...",
+    journal=MemoryJournal(),  # FileJournal(), MemoryJournal(), or NullJournal()
+)
+
+# 2. Log time in a single call (resolves issue key and author automatically)
+result = service.log_time(
+    issue="PROJ-123",
+    hours=2.5,
+    description="Implemented backend auth middleware",
+)
+print("Created Tempo Worklog:", result["tempoWorklogId"])
+
+# 3. List or update worklogs
+worklogs = service.list_time(from_date="2026-09-01", to_date="2026-09-24")
+service.update_time(worklog_id=12345, hours=3.0)
+```
+
+---
+
 ## Running Tests
 
 Run test suite:

@@ -7,14 +7,12 @@ from dataclasses import dataclass
 
 import requests
 
+from .exceptions import TempoClientError, ValidationError
+
 logger = logging.getLogger(__name__)
 
 TEMPO_BASE_URL = "https://api.tempo.io/4"
 REQUEST_TIMEOUT_SECONDS = 10
-
-
-class TempoClientError(RuntimeError):
-    """Raised when a Tempo API call fails."""
 
 
 @dataclass(frozen=True)
@@ -108,7 +106,7 @@ class TempoClient:
             "start_time": fields.get("start_time"),
         }
         if not any(v is not None for v in overrides.values()):
-            raise ValueError("No fields provided to update.")
+            raise ValidationError("No fields provided to update.")
 
         existing = self.get_worklog(worklog_id)
         payload = {
