@@ -1,0 +1,22 @@
+[
+  {
+    "issue": "PROJ-101",
+    "hours": 3.0,
+    "date": "2026-09-24",
+    "description": "Implemented user authentication endpoint"
+  },
+  {
+    "issue": "PROJ-102",
+    "hours": 1.5,
+    "date": "2026-09-24",
+    "time": "14:00:00",
+    "description": "Pull request code review and testing"
+  },
+  {
+    "issue": "PROJ-105",
+    "hours": 0.5,
+    "date": "2026-09-24",
+    "time": "16:30:00",
+    "description": "Daily engineering sync and standup"
+  }
+]

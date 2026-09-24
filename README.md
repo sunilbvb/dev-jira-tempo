@@ -22,6 +22,7 @@
   - [4. Edit a worklog (`update`)](#4-edit-a-worklog-update)
   - [5. Batch upload from file (`batch`)](#5-batch-upload-from-file-batch)
 - [Python SDK Guide (Use in Your Own Apps)](#-python-sdk-guide-use-in-your-own-apps)
+- [📖 Detailed How-To Guide & Scenarios (USAGE.md)](USAGE.md)
 - [Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
 - [Testing](#-testing)
 - [License](#-license)
