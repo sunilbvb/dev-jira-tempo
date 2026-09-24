@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dev-jira-tempo"
+version = "0.1.0"
+description = "CLI to log time to Tempo (Jira time-tracking app)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+tempo-log = "tempo_log.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
