@@ -1,6 +1,6 @@
 # tempo-log (dev-jira-tempo)
 
-[![CI](https://github.com/sunil-bakale/dev-jira-tempo/actions/workflows/ci.yml/badge.svg)](https://github.com/sunil-bakale/dev-jira-tempo/actions/workflows/ci.yml)
+[![CI](https://github.com/sunilbvb/dev-jira-tempo/actions/workflows/ci.yml/badge.svg)](https://github.com/sunilbvb/dev-jira-tempo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
@@ -88,12 +88,12 @@ It is also built as a **reusable Python library**, meaning you can import it int
 #### Option A: Recommended for daily CLI use (via `pipx`)
 [pipx](https://pypa.github.io/pipx/) installs the command globally in an isolated environment so it is always available:
 ```bash
-pipx install git+https://github.com/sunil-bakale/dev-jira-tempo.git
+pipx install git+https://github.com/sunilbvb/dev-jira-tempo.git
 ```
 
 #### Option B: For developers (standard Python virtual environment)
 ```bash
-git clone https://github.com/sunil-bakale/dev-jira-tempo.git
+git clone https://github.com/sunilbvb/dev-jira-tempo.git
 cd dev-jira-tempo
 python3 -m venv .venv
 source .venv/bin/activate
