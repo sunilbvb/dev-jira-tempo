@@ -13,11 +13,15 @@ dist/
 .vscode/
 *.swp
 *.swo
+*.iml
 
 # Testing & Coverage
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Knowledge Graph (local build)
+graphify-out/
 
 # OS files
 .DS_Store

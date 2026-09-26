@@ -23,6 +23,8 @@
   - [5. Batch upload from file (`batch`)](#5-batch-upload-from-file-batch)
 - [Python SDK Guide (Use in Your Own Apps)](#-python-sdk-guide-use-in-your-own-apps)
 - [📖 Detailed How-To Guide & Scenarios (USAGE.md)](USAGE.md)
+- [🤝 Contributing Guide & Roadmap (CONTRIBUTING.md)](CONTRIBUTING.md)
+- [🗂️ Project File Map & Line Index (FILES.md)](FILES.md)
 - [Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
 - [Testing](#-testing)
 - [License](#-license)
