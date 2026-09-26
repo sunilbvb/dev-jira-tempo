@@ -9,7 +9,7 @@ from typing import Any
 from .config import JiraConfig, Settings
 from .exceptions import JiraClientError, TempoClientError, ValidationError
 from .jira_client import JiraClient
-from .journal import BaseJournal, FileJournal
+from .journal import BaseJournal, DualJournal, FileJournal
 from .tempo_client import TempoClient, Worklog
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class TempoService:
         self.tempo_client = tempo_client or TempoClient(tempo_token)
         self.jira_client = jira_client or (JiraClient(jira_config) if jira_config else None)
         self.default_account_id = default_account_id
-        self.journal = journal if journal is not None else FileJournal()
+        self.journal = journal if journal is not None else DualJournal()
 
     @classmethod
     def from_settings(
@@ -107,6 +107,7 @@ class TempoService:
         record = {
             "tempoWorklogId": worklog_id,
             "issueId": resolved_issue_id,
+            "issueKey": issue,
             "accountId": resolved_account_id,
             "hours": hours,
             "startDate": start_date,

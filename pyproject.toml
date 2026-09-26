@@ -17,6 +17,16 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+keyring = [
+    "keyring>=24.0.0",
+]
+tui = [
+    "rich>=13.0.0",
+]
+all = [
+    "keyring>=24.0.0",
+    "rich>=13.0.0",
+]
 
 [project.scripts]
 tempo-log = "tempo_log.cli:main"

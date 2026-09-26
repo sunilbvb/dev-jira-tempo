@@ -156,6 +156,11 @@ alias ttoday="tempo-log list --from $(date +%Y-%m-%d) --to $(date +%Y-%m-%d)"
 
 # Run connection doctor
 alias tdoc="tempo-log doctor"
+
+# Quick stopwatch
+alias tstart="tempo-log start"
+alias tstop="tempo-log stop"
+alias tstat="tempo-log status"
 ```
 
 Now you can log time in 3 seconds:
@@ -166,14 +171,149 @@ ttoday
 
 ---
 
-## 7. Integrating tempo-log in Other Apps (Python SDK)
+## 7. Live Stopwatch / Timer Mode
+
+If you prefer starting a clock when you begin a task and stopping it when done:
+
+```bash
+# Start timer
+tempo-log start --issue PROJ-101 --desc "Investigating memory leak"
+
+# Check elapsed duration anytime
+tempo-log status
+# Output:
+# Active Timer: PROJ-101
+#   Duration:    01:23:45 (~1.4h)
+#   Started At:  2026-09-26T09:00:00+00:00
+#   Description: Investigating memory leak
+
+# Stop timer and auto-log to Tempo
+tempo-log stop
+
+# Or discard timer without logging
+tempo-log stop --discard
+```
+
+---
+
+## 8. Interactive TUI Dashboard
+
+To view today's and this week's progress against targets with an interactive console:
+
+```bash
+# Launch interactive keyboard loop
+tempo-log tui
+```
+**Interactive Shortcuts:**
+- `s`: Start new stopwatch timer
+- `x`: Stop & log active timer
+- `d`: Discard active timer
+- `l`: Quick-log hours manually
+- `r`: Refresh dashboard
+- `q`: Quit
+
+Or print a single dashboard snapshot:
+```bash
+tempo-log tui --once
+```
+
+---
+
+## 9. Weekly Summaries & CSV Export
+
+Query your local SQLite audit journal for daily summaries and export for billing:
+
+```bash
+# View weekly summary
+tempo-log summary
+
+# Export all logged entries to CSV
+tempo-log summary --export-csv timesheet_q3.csv
+```
+
+---
+
+## 10. Managing Secrets Securely with OS Keyring
+
+Avoid storing plain tokens in `.env` by leveraging macOS Keychain, Linux Secret Service, or Windows Credential Vault:
+
+```bash
+# Check keyring availability
+tempo-log auth status
+
+# Store credentials
+tempo-log auth set-token tempo "your-tempo-api-token"
+tempo-log auth set-token jira "your-jira-api-token"
+
+# Retrieve masked token to confirm
+tempo-log auth get-token tempo
+```
+
+When tokens are stored in the OS keyring, `tempo-log` automatically loads them without needing environment variables.
+
+---
+
+## 11. Enabling Shell Autocompletion
+
+Tab completion autocompletes subcommands, arguments, and recent issue keys:
+
+```bash
+# Bash:
+tempo-log completion --shell bash > ~/.tempo-log-completion.bash
+echo "source ~/.tempo-log-completion.bash" >> ~/.bashrc
+
+# Zsh:
+mkdir -p ~/.zfunc
+tempo-log completion --shell zsh > ~/.zfunc/_tempo-log
+echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+
+# Fish:
+tempo-log completion --shell fish > ~/.config/fish/completions/tempo-log.fish
+```
+
+---
+
+## 12. Automated Worklogging via Git Commit Hook
+
+Automatically parse commit messages and log work on every `git commit`:
+
+```bash
+# Install hook into current repository
+tempo-log git-hook install
+
+# Supported commit formats:
+git commit -m "PROJ-123: 1.5h - Implement user profile endpoint"
+git commit -m "PROJ-123 (2h 30m) Fix payment processing edge cases"
+git commit -m "PROJ-123 Refactor cache layer #time 45m"
+
+# Test commit parsing without running git
+tempo-log git-hook check "PROJ-123: 1.5h - Fix login bug"
+```
+
+---
+
+## 13. Connecting to On-Premise Jira Server / Data Center
+
+For enterprise environments with Jira Server or Data Center:
+
+```bash
+export JIRA_BASE_URL="https://jira.internal.company.com"
+export JIRA_API_TOKEN="personal-access-token"
+export JIRA_SERVER=true
+```
+The client automatically switches to Bearer PAT authentication and Jira API v2 endpoints.
+
+---
+
+## 14. Integrating tempo-log in Other Apps (Python SDK)
 
 If you are developing a **Slack Bot**, a **Flask/FastAPI web dashboard**, or a **CLI helper**, import `tempo_log` directly:
 
 ```python
-from tempo_log import TempoService, JiraConfig, MemoryJournal
+from tempo_log import TempoService, JiraConfig, DualJournal
 
-# Setup the engine
+# Setup the engine with dual journaling (JSONL + SQLite)
 service = TempoService(
     tempo_token="YOUR_TEMPO_TOKEN",
     jira_config=JiraConfig(
@@ -181,7 +321,7 @@ service = TempoService(
         email="dev@company.com",
         api_token="YOUR_JIRA_API_TOKEN",
     ),
-    journal=MemoryJournal(), # In-memory journal for server environments
+    journal=DualJournal(),
 )
 
 # Call from a Slack slash command or web API route:
@@ -201,11 +341,11 @@ def handle_slack_time_command(user_slack_id, issue_key, hours, notes):
 
 ---
 
-## 8. Common Error Messages & How to Fix Them
+## 15. Common Error Messages & How to Fix Them
 
-### Error 1: `ERROR: TEMPO_API_TOKEN environment variable is not set.`
-- **Reason**: The tool cannot find your Tempo token.
-- **Fix**: Run `export $(grep -v '^#' .env | xargs)` or check that `.env` has `TEMPO_API_TOKEN=...`.
+### Error 1: `ERROR: TEMPO_API_TOKEN is not set.`
+- **Reason**: The tool cannot find your Tempo token in `.env` or the OS keyring.
+- **Fix**: Run `tempo-log auth set-token tempo <token>` or export `TEMPO_API_TOKEN`.
 
 ### Error 2: `Failed to resolve issue 'PROJ-123': 404 Issue does not exist`
 - **Reason**: The Jira issue key is mistyped, or your Jira API token cannot access this Jira project.

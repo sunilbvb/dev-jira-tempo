@@ -83,27 +83,31 @@ We have identified high-value features and improvements that make fantastic open
 
 | Feature / Scenario | Status | Description & What Needs to be Done |
 |---|:---:|---|
-| **1. Live Stopwatch / Timer Mode** | 🟡 Proposed | Add `tempo-log start PROJ-123` and `tempo-log stop` with local clock state tracking in `~/.tempo-log/active_timer.json`. |
-| **2. Interactive TUI Dashboard** | 🟡 Proposed | Textual/Rich terminal dashboard to browse weekly timesheets, view daily hour totals, and edit worklogs visually. |
-| **3. OS Keyring Secret Storage** | 🟡 Proposed | Support storing `TEMPO_API_TOKEN` and `JIRA_API_TOKEN` in system keyring (macOS Keychain, Linux Secret Service, Windows Credential Vault) instead of plain `.env`. |
-| **4. Shell Tab-Completion** | 🟡 Proposed | Generate shell autocompletion scripts for Bash, Zsh, and Fish with dynamic completion for recent issue keys from the local journal. |
-| **5. Git Commit Auto-Worklog** | 🟡 Proposed | CLI command or Git hook (`tempo-log git-hook`) to parse commit messages (e.g. `PROJ-123: 1.5h - Fix login bug`) and prompt to log time automatically. |
-| **6. SQLite Audit Storage** | 🟡 Proposed | Optional SQLite storage backend (`SQLiteJournal`) allowing SQL querying, weekly hours aggregations, and monthly CSV exports. |
-| **7. Jira Server / DC Support** | 🟡 Proposed | Expand `JiraClient` to detect and support Jira Server / Data Center on-premise endpoints with Personal Access Token (PAT) authentication. |
+| **1. Live Stopwatch / Timer Mode** | ✅ Implemented | `tempo-log start`, `status`, `stop` with local clock state tracking in `~/.tempo-log/active_timer.json`. |
+| **2. Interactive TUI Dashboard** | ✅ Implemented | Rich/ANSI terminal dashboard with live timer display, weekly hour targets, and interactive keyboard shortcuts (`tempo-log tui`). |
+| **3. OS Keyring Secret Storage** | ✅ Implemented | Secure token storage in OS keyring (macOS Keychain, Linux Secret Service, Windows Vault) via `tempo-log auth` and automatic fallback. |
+| **4. Shell Tab-Completion** | ✅ Implemented | Generated shell autocompletion for Bash, Zsh, and Fish with dynamic issue key completion (`tempo-log completion`). |
+| **5. Git Commit Auto-Worklog** | ✅ Implemented | Git hook (`tempo-log git-hook install/run`) to parse commit messages (e.g. `PROJ-123: 1.5h - Fix login bug`) and auto-log work. |
+| **6. SQLite Audit Storage** | ✅ Implemented | Relational audit storage (`SQLiteJournal` & `DualJournal`) with range queries, weekly summaries, and CSV export (`tempo-log summary`). |
+| **7. Jira Server / DC Support** | ✅ Implemented | Support for Jira Server and Data Center on-premise instances with Personal Access Token (PAT) authentication and API v2/v3 fallback. |
 
 ---
 
-### 🛠️ Detailed Tasks Open for Contribution:
+### 🛠️ Completed Capabilities:
 
-- [ ] **Task 2.1 — Live Timer Command (`tempo-log start` / `stop`):**
-  - Implement `tempo-log start <issue>` recording start timestamp and issue key in a temporary state file.
-  - Implement `tempo-log stop` calculating elapsed duration, confirming with the user, and calling `TempoService.log_time()`.
-- [ ] **Task 2.2 — Weekly Summary Command (`tempo-log summary`):**
-  - Add `tempo-log summary --week` to aggregate logged hours per day and per issue key in an easy-to-read ASCII table with total hours versus target (e.g. 40h/week).
-- [ ] **Task 2.3 — Shell Autocompletion (`tempo-log completion`):**
-  - Add autocompletion generators for `bash`, `zsh`, and `fish` completing subcommands, flags, and suggesting issue keys from `~/.tempo-log/journal.jsonl`.
-- [ ] **Task 2.4 — Slack Bot Adapter:**
-  - Create a lightweight Slack bolt example in `examples/slack_slash_command.py` handling `/logtime PROJ-123 2.5h Code review`.
+- [x] **Live Timer Command (`tempo-log start` / `stop` / `status`):**
+  - Implemented `tempo-log start` recording start timestamp, issue key, and description.
+  - Implemented `tempo-log stop` calculating elapsed duration, stopping timer, and logging to Tempo.
+- [x] **Weekly Summary Command (`tempo-log summary` / `tui`):**
+  - Added `tempo-log summary` aggregating logged hours per day and per issue key in an easy-to-read table with targets and CSV export.
+- [x] **Shell Autocompletion (`tempo-log completion`):**
+  - Added autocompletion generators for `bash`, `zsh`, and `fish` completing subcommands, flags, and suggesting issue keys dynamically.
+- [x] **Git Commit Hook (`tempo-log git-hook`):**
+  - Automatic commit message parser supporting `#time`, `(1.5h)`, and `PROJ-123: 2h` formats.
+- [x] **OS Keyring (`tempo-log auth`):**
+  - Credential storage using OS native keyring backends.
+- [x] **Jira Server / DC (`is_server`):**
+  - Bearer PAT authentication and user resolution fallback for on-premise Jira.
 
 ---
 

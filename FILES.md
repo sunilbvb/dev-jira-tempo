@@ -28,12 +28,12 @@
 | `README.md` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/README.md` | **Main project documentation** — overview, quick start, configuration table, CLI usage guide, Python SDK snippet, FAQ, and test instructions |
 | `CONTRIBUTING.md` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/CONTRIBUTING.md` | **Open-source contributor handbook** — development setup, architecture diagram, open-source roadmap wishlist matrix, PR guidelines, and code standards |
 | `FILES.md` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/FILES.md` | **This file** — complete repository file map with absolute paths, line references, and module ownership |
-| `USAGE.md` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/USAGE.md` | **Comprehensive how-to guide** — daily routine, handling missed entries, weekly batch submissions, mistakes fixing, shell aliases, SDK integration, and troubleshooting |
-| `pyproject.toml` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/pyproject.toml` | **Build configuration & packaging** — package metadata, dependencies (`requests>=2.31`), console script entrypoint (`tempo-log`), optional dev dependencies (`pytest>=8.0`) |
+| `USAGE.md` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/USAGE.md` | **Comprehensive how-to guide** — daily routine, timer mode, TUI dashboard, keyring auth, shell completion, git hook, and troubleshooting |
+| `pyproject.toml` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/pyproject.toml` | **Build configuration & packaging** — package metadata, dependencies (`requests>=2.31`), console script entrypoint (`tempo-log`), optional dev/keyring/tui dependencies |
 | `requirements.txt` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/requirements.txt` | Pip fallback requirements file (`requests>=2.31`) |
 | `LICENSE` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/LICENSE` | MIT Open-Source License |
-| `.gitignore` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.gitignore` | Excludes `.env`, `.venv`, `.idea/`, `.claude/`, `*.egg-info/`, `.pytest_cache/`, `dist/`, `build/` |
-| `.env.example` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.env.example` | Environment variable template (`TEMPO_API_TOKEN`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_ACCOUNT_ID`) |
+| `.gitignore` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.gitignore` | Excludes `.env`, `.venv`, `.idea/`, `graphify-out/`, `*.egg-info/`, `.pytest_cache/`, `dist/`, `build/` |
+| `.env.example` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.env.example` | Environment variable template (`TEMPO_API_TOKEN`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_ACCOUNT_ID`, `JIRA_SERVER`) |
 
 ---
 
@@ -41,54 +41,19 @@
 
 | File | Absolute Path | What it owns |
 |---|---|---|
-| `__init__.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `MemoryJournal`, `NullJournal`, `Settings`, `JiraConfig`, `load_settings`, and exceptions) |
-| `service.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/service.py` | **Core service facade (`TempoService`)** — central orchestrator for Jira key resolution, Tempo worklog creation, updates, listings, batch executions, and health checks |
-| `cli.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/cli.py` | **CLI presentation layer** — argparse subcommands (`create`, `list`, `update`, `batch`, `doctor`), command routing, logging setup, and formatted terminal output |
+| `__init__.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `SQLiteJournal`, `DualJournal`, `TimerState`, `start_timer`, `stop_timer`, `set_credential`, `get_credential`, and exceptions) |
+| `service.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/service.py` | **Core service facade (`TempoService`)** — central orchestrator for Jira key resolution, Tempo worklog creation, updates, listings, batch executions, dual journaling, and health checks |
+| `cli.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`), routing, and terminal formatting |
+| `timer.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/timer.py` | **Live stopwatch timer** — local state tracking in `active_timer.json`, elapsed hours calculation, start/stop/status helpers |
+| `tui.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/tui.py` | **Interactive TUI Dashboard** — Rich & ANSI weekly summary, live timer visualization, and interactive keyboard command loop |
+| `keyring_store.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/keyring_store.py` | **OS Keyring Secret Storage** — Keychain / Secret Service / Windows Vault integration for secure credential storage without plaintext files |
+| `completion.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/completion.py` | **Shell tab-completion** — generator for Bash, Zsh, and Fish completion scripts with dynamic issue key lookup |
+| `git_hook.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/git_hook.py` | **Git auto-worklog hook** — commit message parser (`PROJ-123: 1.5h`, `#time 1h`), hook installer, and post-commit executor |
 | `tempo_client.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/tempo_client.py` | **Tempo Cloud REST API v4 Client** — HTTP session management, authorization headers, `Worklog` dataclass, hours-to-seconds conversion, payload formatting, error handling |
-| `jira_client.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/jira_client.py` | **Jira Cloud REST API v3 Client** — Basic authentication, issue key resolution (`/rest/api/3/issue/{key}`), and current user accountId lookup (`/rest/api/3/myself`) |
-| `journal.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/journal.py` | **Pluggable worklog audit journal** — `BaseJournal` protocol, `FileJournal` (JSONL on disk), `MemoryJournal` (in-memory list), and `NullJournal` (silent no-op) |
-| `config.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/config.py` | **Configuration models & loader** — immutable dataclasses `Settings` and `JiraConfig`, environment loader `load_settings()`, and `Settings.from_env()` factory |
+| `jira_client.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/jira_client.py` | **Jira Cloud & Server/DC Client** — Cloud Basic auth & Server/DC Bearer PAT auth, issue key resolution, API v2/v3 fallback |
+| `journal.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/journal.py` | **Pluggable worklog audit journal** — `BaseJournal`, `FileJournal` (JSONL), `SQLiteJournal` (relational query & CSV export), `DualJournal` |
+| `config.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/config.py` | **Configuration models & loader** — `Settings` and `JiraConfig` dataclasses, environment loader with OS keyring fallback |
 | `exceptions.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/exceptions.py` | **Unified exception hierarchy** — base `TempoLogError`, derived `ConfigError`, `TempoClientError`, `JiraClientError`, `ValidationError` |
-
-### Key Functions & Methods by Module
-
-#### `service.py` (`TempoService`)
-| Method | Line | Purpose |
-|---|---|---|
-| `__init__()` | L21 | Initialize service with tokens, clients, and journal backend |
-| `from_settings()` | L38 | Factory method constructing service from a `Settings` instance |
-| `resolve_issue_and_account()` | L47 | Resolve issue keys to IDs and detect author account IDs |
-| `log_time()` | L74 | Submit worklog to Tempo, log to audit journal, return response |
-| `list_time()` | L120 | Query worklogs for account within an optional date window |
-| `update_time()` | L141 | Fetch existing worklog, merge updated fields, submit PUT |
-| `batch_log()` | L158 | Sequentially execute batch worklogs from list of dicts |
-| `check_health()` | L191 | Verify active credential status for Tempo and Jira |
-
-#### `cli.py`
-| Function | Line | Purpose |
-|---|---|---|
-| `build_parser()` | L19 | Construct argparse CLI argument parser and subcommands |
-| `run_create()` | L100 | CLI handler for `tempo-log create` |
-| `run_batch()` | L127 | CLI handler for `tempo-log batch <file>` |
-| `run_doctor()` | L153 | CLI handler for `tempo-log doctor` |
-| `run_list()` | L178 | CLI handler for `tempo-log list` |
-| `run_update()` | L205 | CLI handler for `tempo-log update <id>` |
-| `run()` | L223 | Load configuration and dispatch to appropriate subcommand |
-| `main()` | L247 | Entrypoint setting log levels and executing `run()` |
-
-#### `tempo_client.py` (`TempoClient`)
-| Method | Line | Purpose |
-|---|---|---|
-| `create_worklog()` | L48 | `POST /worklogs` with JSON payload |
-| `list_worklogs()` | L61 | `GET /worklogs/user/{accountId}` or `GET /worklogs` |
-| `get_worklog()` | L88 | `GET /worklogs/{id}` |
-| `update_worklog()` | L98 | `PUT /worklogs/{id}` with merged fields |
-
-#### `jira_client.py` (`JiraClient`)
-| Method | Line | Purpose |
-|---|---|---|
-| `resolve_issue_id()` | L23 | `GET /rest/api/3/issue/{key}?fields=id` |
-| `get_current_account_id()` | L32 | `GET /rest/api/3/myself` |
 
 ---
 
@@ -97,7 +62,14 @@
 | File | Absolute Path | What it tests |
 |---|---|---|
 | `test_service.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_service.py` | Unit tests for `TempoService` (logging, resolving, batching, health check, `MemoryJournal`, `NullJournal`) |
-| `test_cli.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_cli.py` | Unit tests for CLI parser, argument validation, and subcommands (`create`, `list`, `update`, `batch`, `doctor`) |
+| `test_cli.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_cli.py` | Unit tests for core CLI parser and subcommands (`create`, `list`, `update`, `batch`, `doctor`) |
+| `test_cli_extended.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_cli_extended.py` | Unit tests for extended CLI commands (`start`, `stop`, `status`, `summary`, `tui`, `auth`, `completion`, `git-hook`) |
+| `test_timer.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_timer.py` | Unit tests for live stopwatch timer (`start_timer`, `stop_timer`, `get_active_timer`, formatting) |
+| `test_sqlite_journal.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_sqlite_journal.py` | Unit tests for `SQLiteJournal` querying, weekly aggregations, CSV export, and `DualJournal` |
+| `test_git_hook.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_git_hook.py` | Unit tests for commit message regex parsing, hook installation, uninstallation, and execution |
+| `test_completion.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_completion.py` | Unit tests for Bash, Zsh, and Fish tab-completion script generation and dynamic issue lookup |
+| `test_keyring.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_keyring.py` | Unit tests for OS keyring credential storage, deletion, and configuration fallback |
+| `test_jira_server.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_jira_server.py` | Unit tests for Jira Server / Data Center on-premise Bearer PAT auth and account resolution |
 | `test_tempo_client.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_tempo_client.py` | Unit tests for `Worklog.to_payload()`, `create_worklog()`, `list_worklogs()`, `update_worklog()`, error handling |
 | `test_jira_client.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_jira_client.py` | Unit tests for `resolve_issue_id()`, `get_current_account_id()`, status checks |
 | `test_journal.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_journal.py` | Unit tests for `journal_path()` env overrides and `append_entry()` JSONL formatting |
@@ -118,7 +90,7 @@
 
 | File | Absolute Path | What it owns |
 |---|---|---|
-| `ci.yml` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.github/workflows/ci.yml` | GitHub Actions workflow matrix running automated tests across Python 3.9, 3.10, 3.11, 3.12, and 3.13 on push and pull requests |
+| `ci.yml` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.github/workflows/ci.yml` | GitHub Actions workflow matrix running automated tests across Python 3.9, 3.10, 3.11, 3.12, 3.13, and 3.14 on push and PR |
 
 ---
 

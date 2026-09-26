@@ -249,6 +249,112 @@ tempo-log batch my-timesheet.json --stop-on-error
 
 ---
 
+### 6. Live Stopwatch / Timer Mode (`start`, `status`, `stop`)
+
+Track time dynamically as you work:
+```bash
+# Start a timer
+tempo-log start --issue PROJ-123 --desc "Debugging memory leak"
+
+# Check active timer status & elapsed duration
+tempo-log status
+
+# Stop timer and immediately log to Tempo
+tempo-log stop
+
+# Or discard active timer without logging
+tempo-log stop --discard
+```
+
+---
+
+### 7. Interactive TUI Dashboard (`tui`)
+
+Launch an interactive terminal dashboard displaying active timers, today's work, weekly progress against targets, and keyboard shortcuts:
+```bash
+# Interactive live loop
+tempo-log tui
+
+# Or snapshot mode (print once and exit)
+tempo-log tui --once
+```
+
+---
+
+### 8. Weekly Summary & SQLite Audit Backend (`summary`)
+
+Aggregates daily totals, issues breakdown, and exports to CSV:
+```bash
+# View summary table and recent audit entries
+tempo-log summary
+
+# Export complete worklog audit history to CSV
+tempo-log summary --export-csv timesheet_export.csv
+```
+
+---
+
+### 9. OS Keyring Secret Storage (`auth`)
+
+Securely store tokens in macOS Keychain, Linux Secret Service, or Windows Credential Vault instead of keeping plaintext tokens in `.env`:
+```bash
+# Store Tempo API token
+tempo-log auth set-token tempo "your-tempo-token"
+
+# Store Jira API token
+tempo-log auth set-token jira "your-jira-token"
+
+# Check keyring backend status
+tempo-log auth status
+```
+
+---
+
+### 10. Shell Tab-Completion (`completion`)
+
+Generate autocompletion scripts with dynamic issue key suggestions:
+```bash
+# Bash completion
+tempo-log completion --shell bash > ~/.tempo-log-completion.bash
+echo "source ~/.tempo-log-completion.bash" >> ~/.bashrc
+
+# Zsh completion
+tempo-log completion --shell zsh > ~/.zfunc/_tempo-log
+
+# Fish completion
+tempo-log completion --shell fish > ~/.config/fish/completions/tempo-log.fish
+```
+
+---
+
+### 11. Git Commit Auto-Worklog Hook (`git-hook`)
+
+Automatically log work whenever you commit code matching patterns like `PROJ-123: 1.5h - Description` or `#time 1h`:
+```bash
+# Install hook into current Git repository (.git/hooks/post-commit)
+tempo-log git-hook install
+
+# Dry-run test a commit message string
+tempo-log git-hook check "PROJ-123: 1.5h - Fix login redirect bug"
+
+# Uninstall hook
+tempo-log git-hook uninstall
+```
+
+---
+
+### 12. Jira Server & Data Center (On-Premise)
+
+For Jira Server or Data Center with Personal Access Tokens (PAT):
+```bash
+export JIRA_BASE_URL="https://jira.internal.corp"
+export JIRA_API_TOKEN="your-personal-access-token"
+export JIRA_SERVER=true
+```
+The client automatically switches to Bearer PAT authentication and Jira API v2 endpoints.
+
+---
+
 ## 🐍 Python SDK Guide (Use in Your Own Apps)
 
 You can import `tempo_log` directly into your own projects (e.g., Slack bot, FastAPI service, Raycast script):
@@ -319,7 +425,7 @@ Make sure your <code>TEMPO_API_TOKEN</code> has not expired in Tempo. If the err
 <details>
 <summary><b>4. Does this support Jira Server / On-Premise?</b></summary>
 <p>
-Currently, this tool supports <b>Jira Cloud</b> and <b>Tempo Cloud (API v4)</b>.
+Yes! Jira Server and Data Center on-premise deployments are supported via Personal Access Token (PAT) authentication. Simply set <code>JIRA_SERVER=true</code> or omit <code>JIRA_EMAIL</code>.
 </p>
 </details>
 
@@ -333,7 +439,7 @@ To run the automated test suite:
 pytest -v
 ```
 
-All 30 unit tests mock external network requests, so they run in less than **0.2 seconds** without needing real API tokens.
+All 63 unit tests mock external network requests, so they run in less than **0.4 seconds** without needing real API tokens.
 
 ---
 
