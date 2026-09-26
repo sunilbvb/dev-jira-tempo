@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>dev-jira-tempo — Worklog Console</title>
+    <!-- Developer Dashboard UI CSS Framework -->
+    <link rel="stylesheet" href="/static/css/ui.css">
+    <style>
+        :root {
+            --ui-bg-canvas: #0b0f19;
+            --ui-bg-surface: #0f172a;
+            --ui-bg-muted: #1e293b;
+            --ui-border-color: #334155;
+            --ui-primary-color: #6366f1;
+            --ui-text-primary: #f8fafc;
+            --ui-text-secondary: #cbd5e1;
+            --ui-text-muted: #64748b;
+        }
+
+        body {
+            background-color: var(--ui-bg-canvas);
+            color: var(--ui-text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        .layout-container {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Top Header */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--ui-border-color);
+            margin-bottom: 24px;
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+            color: #f8fafc;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #6366f1, #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 20px;
+        }
+
+        .col-4 { grid-column: span 4; }
+        .col-8 { grid-column: span 8; }
+        .col-12 { grid-column: span 12; }
+
+        @media (max-width: 900px) {
+            .col-4, .col-8 { grid-column: span 12; }
+        }
+
+        /* Metric Card styling */
+        .metric-card {
+            background: var(--ui-bg-surface);
+            border: 1px solid var(--ui-border-color);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .metric-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ui-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 26px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 12px;
+        }
+
+        /* Digital Stopwatch */
+        .timer-display-box {
+            font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: #38bdf8;
+            text-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+            margin: 6px 0 12px;
+        }
+
+        /* Quick chip buttons */
+        .chip-group {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+            margin-bottom: 12px;
+        }
+
+        .chip-hours {
+            background: var(--ui-bg-muted);
+            border: 1px solid var(--ui-border-color);
+            color: var(--ui-text-secondary);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .chip-hours:hover {
+            border-color: var(--ui-primary-color);
+            color: #fff;
+        }
+
+        /* Toast notifications container */
+        #toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="layout-container">
+        <!-- Application Header -->
+        <header class="app-header">
+            <div class="brand-title">
+                <div class="brand-icon">⏱️</div>
+                <div>dev-jira-tempo <span style="font-size:13px;font-weight:400;color:#94a3b8;margin-left:8px">Worklog Console & Dashboard</span></div>
+            </div>
+
+            <div class="header-actions">
+                <span id="badge-tempo" class="ui-badge ui-badge-secondary">Tempo: Checking...</span>
+                <span id="badge-jira" class="ui-badge ui-badge-secondary">Jira: Checking...</span>
+                <button id="btn-refresh" class="ui-button ui-button-secondary" title="Refresh data">🔄 Refresh</button>
+                <button id="btn-settings" class="ui-button ui-button-primary">⚙️ Configuration</button>
+            </div>
+        </header>
+
+        <!-- Top Metrics Row -->
+        <div class="dashboard-grid" style="margin-bottom: 20px;">
+            <!-- Today's Hours -->
+            <div class="col-4 metric-card">
+                <div class="metric-title">Today's Logged Hours</div>
+                <div id="stat-today-hours" class="metric-value">0.00h / 8.00h</div>
+                <div class="ui-progress">
+                    <div id="stat-today-bar" class="ui-progress-bar" style="width: 0%; background: #10b981;">0%</div>
+                </div>
+            </div>
+
+            <!-- This Week's Hours -->
+            <div class="col-4 metric-card">
+                <div class="metric-title">Weekly Total vs 40h Target</div>
+                <div id="stat-week-hours" class="metric-value">0.00h / 40.00h</div>
+                <div class="ui-progress">
+                    <div id="stat-week-bar" class="ui-progress-bar" style="width: 0%; background: #6366f1;">0%</div>
+                </div>
+            </div>
+
+            <!-- Live Timer Widget -->
+            <div class="col-4 metric-card" id="timer-panel" style="border-color: #3b82f6;">
+                <div class="metric-title" style="color: #60a5fa;">● Live Stopwatch Timer</div>
+                <div id="timer-display" class="timer-display-box">00:00:00</div>
+                <div id="timer-label" style="font-size: 13px; color: var(--ui-text-muted); margin-bottom: 12px;">
+                    ○ Stopwatch Idle (Ready to start)
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button id="btn-stop-timer" class="ui-button ui-button-primary" style="display:none; background:#10b981;">⏹ Stop & Log</button>
+                    <button id="btn-discard-timer" class="ui-button ui-button-danger" style="display:none;">🗑 Discard</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace Row -->
+        <div class="dashboard-grid">
+            <!-- Left: Quick Actions -->
+            <div class="col-4" style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- Start Timer Card -->
+                <div class="ui-card" style="background: var(--ui-bg-surface); border: 1px solid var(--ui-border-color); border-radius: 12px; padding: 20px;">
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #f8fafc;">Start Stopwatch Timer</div>
+                    <div style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Jira Issue Key</label>
+                        <input id="timer-input-issue" class="ui-input" type="text" placeholder="e.g. PROJ-101" style="width: 100%;">
+                    </div>
+                    <div style="margin-bottom: 14px;">
+                        <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Description (Optional)</label>
+                        <input id="timer-input-desc" class="ui-input" type="text" placeholder="What are you working on?" style="width: 100%;">
+                    </div>
+                    <button id="btn-start-timer" class="ui-button ui-button-primary" style="width: 100%;">▶ Start Timer</button>
+                </div>
+
+                <!-- Quick Log Work Card -->
+                <div class="ui-card" style="background: var(--ui-bg-surface); border: 1px solid var(--ui-border-color); border-radius: 12px; padding: 20px;">
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 14px; color: #f8fafc;">Quick Worklog Submission</div>
+                    <form id="form-quick-log">
+                        <div style="margin-bottom: 12px;">
+                            <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Jira Issue Key</label>
+                            <input id="log-issue" class="ui-input" type="text" placeholder="e.g. PROJ-123" required style="width: 100%;">
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Hours</label>
+                            <input id="log-hours" class="ui-input" type="number" step="0.25" min="0.1" placeholder="e.g. 1.5" required style="width: 100%;">
+                            <div class="chip-group">
+                                <span class="chip-hours" data-hours="0.5">0.5h</span>
+                                <span class="chip-hours" data-hours="1.0">1.0h</span>
+                                <span class="chip-hours" data-hours="2.0">2.0h</span>
+                                <span class="chip-hours" data-hours="4.0">4.0h</span>
+                                <span class="chip-hours" data-hours="8.0">8.0h</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 12px;">
+                            <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Work Date</label>
+                            <input id="log-date" class="ui-input" type="date" required style="width: 100%;">
+                        </div>
+
+                        <div style="margin-bottom: 16px;">
+                            <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Description</label>
+                            <textarea id="log-desc" class="ui-input" rows="2" placeholder="Task summary or commit details" style="width: 100%;"></textarea>
+                        </div>
+
+                        <button id="btn-submit-worklog" type="submit" class="ui-button ui-button-primary" style="width: 100%;">Log Work to Tempo</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right: Weekly Breakdown & Audit Table -->
+            <div class="col-8" style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- Weekly Issue Breakdown -->
+                <div class="ui-card" style="background: var(--ui-bg-surface); border: 1px solid var(--ui-border-color); border-radius: 12px; padding: 20px;">
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 14px; color: #f8fafc;">Weekly Issue Breakdown</div>
+                    <div id="issues-breakdown-list">
+                        <!-- Populated by JS -->
+                        <p style="color:#64748b;font-size:13px">Loading summary...</p>
+                    </div>
+                </div>
+
+                <!-- Recent Local Audit Table -->
+                <div class="ui-card" style="background: var(--ui-bg-surface); border: 1px solid var(--ui-border-color); border-radius: 12px; padding: 20px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                        <div style="font-size: 16px; font-weight: 600; color: #f8fafc;">Recent Worklog Audit History</div>
+                        <a href="/api/export-csv" download="tempo_worklogs.csv" class="ui-button ui-button-secondary" style="font-size: 12px; text-decoration: none;">📥 Export CSV</a>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table class="ui-table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--ui-border-color); font-size: 12px; color: var(--ui-text-muted);">
+                                    <th style="padding: 10px 8px;">Date</th>
+                                    <th style="padding: 10px 8px;">Issue</th>
+                                    <th style="padding: 10px 8px;">Hours</th>
+                                    <th style="padding: 10px 8px;">Description</th>
+                                    <th style="padding: 10px 8px;">Tempo ID</th>
+                                </tr>
+                            </thead>
+                            <tbody id="worklog-tbody" style="font-size: 13px;">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">Loading audit logs...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="config-modal" class="ui-modal-backdrop">
+        <div class="ui-modal" style="background: var(--ui-bg-surface); border: 1px solid var(--ui-border-color); border-radius: 12px; color: var(--ui-text-primary);">
+            <div style="padding: 18px 24px; border-bottom: 1px solid var(--ui-border-color); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 18px;">Configuration & Credentials</h3>
+                <button id="btn-close-modal" class="ui-button ui-button-secondary" style="padding: 4px 8px;">✕</button>
+            </div>
+
+            <div style="padding: 24px; display: flex; flex-direction: column; gap: 14px; max-height: 70vh; overflow-y: auto;">
+                <!-- Storage target -->
+                <div>
+                    <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 6px;">Credential Storage Target</label>
+                    <div style="display: flex; gap: 16px; font-size: 13px;">
+                        <label><input type="radio" name="cfg-storage" id="cfg-storage-env" checked> Local .env file</label>
+                        <label><input type="radio" name="cfg-storage" id="cfg-storage-keyring"> OS Keyring (Keychain / Vault)</label>
+                    </div>
+                </div>
+
+                <!-- Tempo Token -->
+                <div>
+                    <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Tempo REST API Token (Required)</label>
+                    <input id="cfg-tempo-token" class="ui-input" type="password" placeholder="Enter Tempo API Token" style="width: 100%;">
+                </div>
+
+                <!-- Jira Base URL -->
+                <div>
+                    <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Jira Instance Base URL</label>
+                    <input id="cfg-jira-base" class="ui-input" type="url" placeholder="https://yourcompany.atlassian.net" style="width: 100%;">
+                </div>
+
+                <!-- Jira Email -->
+                <div>
+                    <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Jira Email (Cloud only)</label>
+                    <input id="cfg-jira-email" class="ui-input" type="email" placeholder="developer@example.com" style="width: 100%;">
+                </div>
+
+                <!-- Jira API Token / PAT -->
+                <div>
+                    <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Jira API Token or PAT (Personal Access Token)</label>
+                    <input id="cfg-jira-token" class="ui-input" type="password" placeholder="API Token or Bearer PAT" style="width: 100%;">
+                </div>
+
+                <!-- Jira Account ID -->
+                <div>
+                    <label style="display:block; font-size: 12px; color: var(--ui-text-muted); margin-bottom: 4px;">Jira Account ID (Optional, auto-detected)</label>
+                    <input id="cfg-jira-account" class="ui-input" type="text" placeholder="Auto-detected if left blank" style="width: 100%;">
+                </div>
+
+                <!-- Server Toggle -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="cfg-jira-server">
+                    <label for="cfg-jira-server" style="font-size: 13px;">On-Premise Jira Server / Data Center (Uses Bearer PAT auth)</label>
+                </div>
+            </div>
+
+            <div style="padding: 16px 24px; border-top: 1px solid var(--ui-border-color); display: flex; justify-content: space-between;">
+                <button id="btn-test-health" class="ui-button ui-button-secondary">🩺 Test Connection</button>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-save-config" class="ui-button ui-button-primary">Save Configuration</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

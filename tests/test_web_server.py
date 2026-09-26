@@ -1,0 +1,99 @@
+import json
+import threading
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from unittest import mock
+import pytest
+import requests
+
+from tempo_log.web_server import TempoWebHandler
+
+
+@pytest.fixture(scope="module")
+def server():
+    # Start on dynamic test port (e.g. 18234)
+    server_address = ("127.0.0.1", 18234)
+    httpd = ThreadingHTTPServer(server_address, TempoWebHandler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    yield "http://127.0.0.1:18234"
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def test_get_health_endpoint(server):
+    resp = requests.get(f"{server}/api/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "keyring_available" in data
+    assert "tempo_ok" in data
+
+
+def test_get_config_endpoint(server):
+    resp = requests.get(f"{server}/api/config")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "tempo_token_set" in data
+    assert "jira_base_url" in data
+    assert "is_server" in data
+
+
+def test_post_config_endpoint(server, tmp_path):
+    with mock.patch("tempo_log.web_server.Path") as mock_path:
+        env_mock = tmp_path / ".env"
+        mock_path.return_value = env_mock
+
+        payload = {
+            "tempo_token": "test-tempo-token-12345",
+            "jira_base_url": "https://company.atlassian.net",
+            "jira_email": "dev@company.com",
+            "jira_token": "jira-tok",
+            "is_server": False,
+            "use_keyring": False,
+        }
+        resp = requests.post(f"{server}/api/config", json=payload)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+
+def test_timer_lifecycle_endpoints(server, tmp_path):
+    timer_file = tmp_path / "test_active_timer.json"
+    with mock.patch("tempo_log.timer.timer_path", return_value=timer_file):
+        # 1. Initially idle
+        resp_idle = requests.get(f"{server}/api/timer")
+        assert resp_idle.status_code == 200
+        assert resp_idle.json()["active"] is False
+
+        # 2. Start timer
+        start_payload = {"issue": "PROJ-999", "description": "Web UI testing"}
+        resp_start = requests.post(f"{server}/api/timer/start", json=start_payload)
+        assert resp_start.status_code == 200
+        assert resp_start.json()["status"] == "started"
+
+        # 3. Check active timer
+        resp_active = requests.get(f"{server}/api/timer")
+        assert resp_active.status_code == 200
+        assert resp_active.json()["active"] is True
+        assert resp_active.json()["issue"] == "PROJ-999"
+
+        # 4. Discard timer
+        resp_discard = requests.post(f"{server}/api/timer/discard")
+        assert resp_discard.status_code == 200
+        assert resp_discard.json()["status"] == "discarded"
+
+
+def test_summary_and_worklogs_endpoints(server):
+    resp_sum = requests.get(f"{server}/api/summary")
+    assert resp_sum.status_code == 200
+    assert "total_hours" in resp_sum.json()
+
+    resp_logs = requests.get(f"{server}/api/worklogs?limit=5")
+    assert resp_logs.status_code == 200
+    assert "worklogs" in resp_logs.json()
+
+
+def test_serve_static_index_html(server):
+    resp = requests.get(f"{server}/")
+    assert resp.status_code == 200
+    assert "dev-jira-tempo" in resp.text
+    assert "ui.css" in resp.text

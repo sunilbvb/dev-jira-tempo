@@ -32,8 +32,19 @@
 | `pyproject.toml` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/pyproject.toml` | **Build configuration & packaging** — package metadata, dependencies (`requests>=2.31`), console script entrypoint (`tempo-log`), optional dev/keyring/tui dependencies |
 | `requirements.txt` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/requirements.txt` | Pip fallback requirements file (`requests>=2.31`) |
 | `LICENSE` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/LICENSE` | MIT Open-Source License |
+| `start.sh` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/start.sh` | **Console startup script** — loads configuration and starts Tempo Web Console on port 18114 |
 | `.gitignore` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.gitignore` | Excludes `.env`, `.venv`, `.idea/`, `graphify-out/`, `*.egg-info/`, `.pytest_cache/`, `dist/`, `build/` |
 | `.env.example` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/.env.example` | Environment variable template (`TEMPO_API_TOKEN`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_ACCOUNT_ID`, `JIRA_SERVER`) |
+
+---
+
+## 🎨 Web Frontend UI (`frontend/`)
+
+| File | Absolute Path | What it owns |
+|---|---|---|
+| `index.html` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/frontend/index.html` | **Single-page web dashboard** built with `developer-dashboard-ui` components (metrics, stopwatch, quick log, weekly summary, config modal) |
+| `ui.css` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/frontend/static/css/ui.css` | Bundled stylesheet from `developer-dashboard-ui` design tokens and components |
+| `app.js` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/frontend/static/js/app.js` | Vanilla JS application client managing live stopwatch, API calls, and reactive UI updates |
 
 ---
 
@@ -41,7 +52,8 @@
 
 | File | Absolute Path | What it owns |
 |---|---|---|
-| `__init__.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `SQLiteJournal`, `DualJournal`, `TimerState`, `start_timer`, `stop_timer`, `set_credential`, `get_credential`, and exceptions) |
+| `__init__.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `SQLiteJournal`, `DualJournal`, `TimerState`, `start_timer`, `stop_timer`, `run_server`, and exceptions) |
+| `web_server.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/web_server.py` | **Embedded REST API & static web server** — zero-dependency HTTP server delivering JSON endpoints and serving the frontend dashboard |
 | `service.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/service.py` | **Core service facade (`TempoService`)** — central orchestrator for Jira key resolution, Tempo worklog creation, updates, listings, batch executions, dual journaling, and health checks |
 | `cli.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`), routing, and terminal formatting |
 | `timer.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/src/tempo_log/timer.py` | **Live stopwatch timer** — local state tracking in `active_timer.json`, elapsed hours calculation, start/stop/status helpers |
@@ -74,6 +86,7 @@
 | `test_jira_client.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_jira_client.py` | Unit tests for `resolve_issue_id()`, `get_current_account_id()`, status checks |
 | `test_journal.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_journal.py` | Unit tests for `journal_path()` env overrides and `append_entry()` JSONL formatting |
 | `test_config.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_config.py` | Unit tests for `load_settings()`, minimal config, full config, and validation errors |
+| `test_web_server.py` | `/home/sunil-bakale/IdeaProjects/dev-jira-tempo/tests/test_web_server.py` | Unit tests for embedded REST API endpoints and static file web server |
 
 ---
 

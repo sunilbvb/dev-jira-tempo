@@ -50,6 +50,7 @@ from .tui import (
     render_dashboard_rich,
     run_interactive_tui,
 )
+from .web_server import run_server
 
 __version__ = "0.1.0"
 
@@ -89,6 +90,7 @@ __all__ = [
     "render_dashboard_rich",
     "run_git_hook",
     "run_interactive_tui",
+    "run_server",
     "set_credential",
     "start_timer",
     "stop_timer",

@@ -152,6 +152,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--once", action="store_true", help="Print dashboard snapshot and exit."
     )
 
+    # 10. ui / web (Interactive Web Console)
+    ui_parser = subparsers.add_parser("ui", help="Launch Tempo Web Console (HTML dashboard).")
+    ui_parser.add_argument("--port", type=int, default=18114, help="Port to serve on (default: 18114).")
+    ui_parser.add_argument("--host", default="0.0.0.0", help="Host interface (default: 0.0.0.0).")
+    ui_parser.add_argument("--terminal", action="store_true", help="Launch terminal TUI instead of web dashboard.")
+    ui_parser.add_argument("--once", action="store_true", help="Print terminal dashboard snapshot and exit.")
+
     # 10. summary (SQLite Audit Log & Metrics)
     summary_parser = subparsers.add_parser("summary", help="View weekly summary and audit log.")
     summary_parser.add_argument("-F", "--from", dest="from_date", help="Filter from date (YYYY-MM-DD).")
@@ -445,6 +452,23 @@ def run_tui(args: argparse.Namespace, target: Settings | TempoService | None = N
     return 0
 
 
+def run_ui(args: argparse.Namespace, target: Settings | TempoService | None = None) -> int:
+    if getattr(args, "terminal", False) or getattr(args, "once", False):
+        return run_tui(args, target)
+
+    port = getattr(args, "port", 18114)
+    host = getattr(args, "host", "0.0.0.0")
+    print(f"🚀 Starting Tempo Web Console on http://localhost:{port} (host: {host})")
+    print("Press Ctrl+C to stop.")
+    try:
+        from .web_server import run_server
+        run_server(port=port, host=host)
+        return 0
+    except Exception as exc:
+        logger.error("Web server error: %s", exc)
+        return 1
+
+
 def run_auth(args: argparse.Namespace) -> int:
     action = args.auth_action
     if action == "status":
@@ -568,6 +592,8 @@ def run(args: argparse.Namespace) -> int:
     # Commands that may run without settings or handle them lazily
     if args.command == "tui":
         return run_tui(args)
+    if args.command in ("ui", "web"):
+        return run_ui(args)
     if args.command == "git-hook" and args.hook_action == "run":
         return run_hook_command(args)
 

@@ -127,8 +127,17 @@ pip install -e ".[dev]"
 
 ---
 
-### Step 3: Test and Log Time!
+### Step 3: Launch Web Dashboard or CLI!
 
+#### Option A: Web Dashboard (`developer-dashboard-ui` design)
+Launch the modern web console in your browser:
+```bash
+./start.sh
+# Running at http://localhost:18114
+```
+Features live stopwatch timer, daily/weekly progress targets, issue breakdown, worklog submission form, and in-browser credential configuration.
+
+#### Option B: Terminal CLI
 Test that your credentials work:
 ```bash
 tempo-log doctor
@@ -439,7 +448,7 @@ To run the automated test suite:
 pytest -v
 ```
 
-All 63 unit tests mock external network requests, so they run in less than **0.4 seconds** without needing real API tokens.
+All 69 unit tests mock external network requests, so they run in less than **1.0 second** without needing real API tokens.
 
 ---
 
