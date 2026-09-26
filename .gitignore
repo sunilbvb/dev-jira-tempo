@@ -1,11 +1,45 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-.venv/
-venv/
-*.egg-info/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
 build/
 dist/
+*.egg-info/
+*.egg
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Environment variables & secrets (keep .env.example tracked)
 .env
+.env.*
+!.env.example
+*.local
+
+# Logs and databases
+*.log
+*.pid
+*.sqlite
+*.sqlite3
+journal.jsonl
+.tempo-log/
 
 # IDE & Editor files
 .idea/
@@ -13,16 +47,29 @@ dist/
 .vscode/
 *.swp
 *.swo
+*~
 *.iml
+*.ipr
+*.iws
 
 # Testing & Coverage
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.cache
+.tox/
+.nox/
 
-# Knowledge Graph (local build)
+# Knowledge Graph (local build output)
 graphify-out/
 
-# OS files
+# Operating System files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
