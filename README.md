@@ -162,6 +162,11 @@ tempo-log create --issue PROJ-123 --hours 2 --description "Initial project setup
 | `JIRA_EMAIL` | Optional | `alex@company.com` | The email address you use to log into Jira. |
 | `JIRA_API_TOKEN` | Optional | `ATATT3...` | Go to [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens) and click **Create API token**. |
 | `JIRA_ACCOUNT_ID` | Optional | `557058:9182...` | Your Jira user account ID. (If left blank, the tool detects it automatically). |
+| `TEMPO_BASE_URL` | Optional | `https://api.tempo.io/4` | Custom base endpoint URL for Tempo REST API v4. |
+| `TEMPO_DAILY_CAP_HOURS` | Optional | `8.0` | Daily cap threshold in hours for submission safety warnings. |
+| `TEMPO_ROUND_MINUTES` | Optional | `15` | Increment in minutes to round up worklog durations (e.g. 15). |
+| `TEMPO_DEFAULT_ISSUE` | Optional | `PROJ-123` | Default issue key fallback for general worklogs. |
+| `TEMPO_MEETING_ISSUE` | Optional | `PROJ-456` | Fallback issue key for meeting worklogs. |
 | `TEMPO_LOG_JOURNAL` | Optional | `/path/to/log.jsonl` | Custom file path for the local audit log. Defaults to `~/.tempo-log/journal.jsonl`. |
 
 ---

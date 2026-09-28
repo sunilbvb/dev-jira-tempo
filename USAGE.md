@@ -107,7 +107,50 @@ Journal: /home/your-user/.tempo-log/journal.jsonl
 
 ---
 
-## 4. Fixing Mistakes with `update`
+## 4. Import from a Markdown Worklog (`from-worklog`)
+
+If you maintain a daily markdown journal or worklog file, `tempo-log` can parse and import it automatically!
+
+### Markdown Worklog Format
+
+```markdown
+## 2026-09-24
+
+Tempo: PROJ-123 | 13:41-13:56
+- Fixed plan name truncation
+- Neutral colour when no active plan
+
+Tempo: meeting | 16:33-17:03
+- Reviewed currency handling with the backend team
+
+Tempo: skip
+- Notes for this section are not logged
+```
+
+- **`## YYYY-MM-DD`**: Sets the date for following entries.
+- **`Tempo: <KEY|default|meeting|skip> | HH:MM-HH:MM`**: Specifies issue key and start-end time.
+- Bullets directly under `Tempo:` line become the worklog description.
+- `skip` ignores the entry.
+- `default` and `meeting` map to `TEMPO_DEFAULT_ISSUE` and `TEMPO_MEETING_ISSUE` settings.
+
+### Preview Mode (Default)
+```bash
+tempo-log from-worklog worklog.md --from 2026-09-21 --to 2026-09-25
+```
+
+### Submit to Tempo
+```bash
+tempo-log from-worklog worklog.md --from 2026-09-21 --to 2026-09-25 --submit
+```
+
+### Enforce Safety Checks with `--strict`
+```bash
+tempo-log from-worklog worklog.md --from 2026-09-21 --to 2026-09-25 --submit --strict
+```
+
+---
+
+## 5. Fixing Mistakes with `update`
 
 Made a typo or logged the wrong hours? You do **not** need to open a browser to fix it.
 

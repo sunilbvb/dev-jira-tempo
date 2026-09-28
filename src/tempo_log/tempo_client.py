@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from .exceptions import TempoClientError, ValidationError
 
@@ -13,6 +15,21 @@ logger = logging.getLogger(__name__)
 
 TEMPO_BASE_URL = "https://api.tempo.io/4"
 REQUEST_TIMEOUT_SECONDS = 10
+
+
+def create_retrying_session(max_retries: int = 3, backoff_factor: float = 0.5) -> requests.Session:
+    """Create a requests.Session configured with automatic retries and exponential backoff."""
+    session = requests.Session()
+    retries = Retry(
+        total=max_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[429, 500, 502, 503, 504],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 @dataclass(frozen=True)
@@ -36,8 +53,14 @@ class Worklog:
 
 
 class TempoClient:
-    def __init__(self, api_token: str, session: requests.Session | None = None):
-        self._session = session or requests.Session()
+    def __init__(
+        self,
+        api_token: str,
+        session: requests.Session | None = None,
+        base_url: str | None = None,
+    ):
+        self.base_url = (base_url or TEMPO_BASE_URL).rstrip("/")
+        self._session = session if session is not None else create_retrying_session()
         self._session.headers.update(
             {
                 "Authorization": f"Bearer {api_token}",
@@ -48,7 +71,7 @@ class TempoClient:
     def create_worklog(self, worklog: Worklog) -> dict:
         logger.debug("Submitting worklog for issue id %s", worklog.issue_id)
         response = self._session.post(
-            f"{TEMPO_BASE_URL}/worklogs",
+            f"{self.base_url}/worklogs",
             json=worklog.to_payload(),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
@@ -73,9 +96,9 @@ class TempoClient:
             params["to"] = to_date
 
         url = (
-            f"{TEMPO_BASE_URL}/worklogs/user/{account_id}"
+            f"{self.base_url}/worklogs/user/{account_id}"
             if account_id
-            else f"{TEMPO_BASE_URL}/worklogs"
+            else f"{self.base_url}/worklogs"
         )
         logger.debug("Listing worklogs from %s (params=%s)", url, params)
         response = self._session.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -87,7 +110,7 @@ class TempoClient:
 
     def get_worklog(self, worklog_id: int) -> dict:
         response = self._session.get(
-            f"{TEMPO_BASE_URL}/worklogs/{worklog_id}", timeout=REQUEST_TIMEOUT_SECONDS
+            f"{self.base_url}/worklogs/{worklog_id}", timeout=REQUEST_TIMEOUT_SECONDS
         )
         if not response.ok:
             raise TempoClientError(
@@ -128,7 +151,7 @@ class TempoClient:
 
         logger.debug("Updating worklog %s with %s", worklog_id, payload)
         response = self._session.put(
-            f"{TEMPO_BASE_URL}/worklogs/{worklog_id}",
+            f"{self.base_url}/worklogs/{worklog_id}",
             json=payload,
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
@@ -137,3 +160,15 @@ class TempoClient:
                 f"Failed to update worklog {worklog_id}: {response.status_code} {response.text}"
             )
         return response.json()
+
+    def delete_worklog(self, worklog_id: int) -> bool:
+        """Delete an existing Tempo worklog by ID."""
+        logger.debug("Deleting worklog %s", worklog_id)
+        response = self._session.delete(
+            f"{self.base_url}/worklogs/{worklog_id}", timeout=REQUEST_TIMEOUT_SECONDS
+        )
+        if not response.ok:
+            raise TempoClientError(
+                f"Failed to delete worklog {worklog_id}: {response.status_code} {response.text}"
+            )
+        return True

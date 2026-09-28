@@ -68,26 +68,49 @@ class SQLiteJournal(BaseJournal):
         conn.row_factory = sqlite3.Row
         return conn
 
+    CURRENT_SCHEMA_VERSION = 1
+
     def _init_db(self) -> None:
         with self._get_connection() as conn:
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS worklogs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tempo_worklog_id INTEGER,
-                    issue_id INTEGER,
-                    issue_key TEXT,
-                    account_id TEXT,
-                    hours REAL,
-                    start_date TEXT,
-                    start_time TEXT,
-                    description TEXT,
-                    logged_at TEXT
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY
                 )
                 """
             )
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON worklogs(start_date)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_issue ON worklogs(issue_id)")
+            cursor = conn.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
+            row = cursor.fetchone()
+            current_ver = row["version"] if row else 0
+
+            if current_ver == 0:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS worklogs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tempo_worklog_id INTEGER,
+                        issue_id INTEGER,
+                        issue_key TEXT,
+                        account_id TEXT,
+                        hours REAL,
+                        start_date TEXT,
+                        start_time TEXT,
+                        description TEXT,
+                        logged_at TEXT
+                    )
+                    """
+                )
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON worklogs(start_date)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_issue ON worklogs(issue_id)")
+                conn.execute("INSERT INTO schema_version (version) VALUES (?)", (self.CURRENT_SCHEMA_VERSION,))
+                current_ver = self.CURRENT_SCHEMA_VERSION
+
+            self._run_migrations(conn, current_ver)
+
+    def _run_migrations(self, conn: sqlite3.Connection, from_version: int) -> None:
+        """Run incremental schema migrations if current DB version < CURRENT_SCHEMA_VERSION."""
+        # Future migration steps can be added here (e.g., if from_version < 2: ...)
+        pass
 
     def append(self, record: dict[str, Any]) -> None:
         with self._get_connection() as conn:

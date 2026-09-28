@@ -10,6 +10,7 @@ from .config import JiraConfig, Settings
 from .exceptions import JiraClientError, TempoClientError, ValidationError
 from .jira_client import JiraClient
 from .journal import BaseJournal, DualJournal, FileJournal
+from .safety import find_duplicates
 from .tempo_client import TempoClient, Worklog
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,11 @@ class TempoService:
         journal: BaseJournal | None = None,
         tempo_client: TempoClient | None = None,
         jira_client: JiraClient | None = None,
+        tempo_base_url: str | None = None,
+        settings: Settings | None = None,
     ):
-        self.tempo_client = tempo_client or TempoClient(tempo_token)
+        self.settings = settings
+        self.tempo_client = tempo_client or TempoClient(tempo_token, base_url=tempo_base_url)
         self.jira_client = jira_client or (JiraClient(jira_config) if jira_config else None)
         self.default_account_id = default_account_id
         self.journal = journal if journal is not None else DualJournal()
@@ -42,6 +46,8 @@ class TempoService:
             jira_config=settings.jira,
             default_account_id=settings.default_account_id,
             journal=journal,
+            tempo_base_url=settings.tempo_base_url,
+            settings=settings,
         )
 
     def resolve_issue_and_account(
@@ -56,11 +62,38 @@ class TempoService:
         if issue_id is None:
             if not issue:
                 raise ValidationError("Must provide either issue key (e.g. 'PROJ-123') or numeric issue_id.")
-            if not self.jira_client:
-                raise ValidationError(
-                    "Jira credentials required to resolve issue key. Provide issue_id or configure Jira."
-                )
-            issue_id = self.jira_client.resolve_issue_id(issue)
+
+            # Check fallbacks for 'default' and 'meeting'
+            issue_lower = issue.lower()
+            if issue_lower == "default":
+                fallback = self.settings.tempo_default_issue if self.settings else None
+                if not fallback:
+                    import os
+                    from .keyring_store import get_credential
+
+                    fallback = os.environ.get("TEMPO_DEFAULT_ISSUE") or get_credential("TEMPO_DEFAULT_ISSUE")
+                if not fallback:
+                    raise ValidationError("Fallback issue 'default' requested but TEMPO_DEFAULT_ISSUE is not configured.")
+                issue = fallback
+            elif issue_lower == "meeting":
+                fallback = self.settings.tempo_meeting_issue if self.settings else None
+                if not fallback:
+                    import os
+                    from .keyring_store import get_credential
+
+                    fallback = os.environ.get("TEMPO_MEETING_ISSUE") or get_credential("TEMPO_MEETING_ISSUE")
+                if not fallback:
+                    raise ValidationError("Fallback issue 'meeting' requested but TEMPO_MEETING_ISSUE is not configured.")
+                issue = fallback
+
+            if issue.isdigit():
+                issue_id = int(issue)
+            else:
+                if not self.jira_client:
+                    raise ValidationError(
+                        "Jira credentials required to resolve issue key. Provide issue_id or configure Jira."
+                    )
+                issue_id = self.jira_client.resolve_issue_id(issue)
 
         if resolved_account_id is None:
             if not self.jira_client:
@@ -160,17 +193,63 @@ class TempoService:
         self,
         entries: list[dict[str, Any]],
         stop_on_error: bool = False,
+        allow_duplicates: bool = True,
+        dry_run: bool = False,
+        rollback_on_error: bool = False,
     ) -> tuple[int, int, list[str]]:
         """Process a list of worklog entries. Returns (succeeded, failed, failures)."""
         succeeded = 0
         failed = 0
         failures: list[str] = []
+        created_worklog_ids: list[int] = []
 
-        for i, entry in enumerate(entries):
+        worklogs_to_process = entries
+        if not allow_duplicates and entries:
+            dates = [e.get("date") for e in entries if e.get("date")]
+            if dates:
+                min_date = min(dates)
+                max_date = max(dates)
+                existing: list[dict[str, Any]] = []
+                try:
+                    acc_id = self.default_account_id
+                    if not acc_id and self.jira_client:
+                        acc_id = self.jira_client.get_current_account_id()
+                    if acc_id:
+                        res = self.list_time(account_id=acc_id, from_date=min_date, to_date=max_date, limit=1000)
+                        existing = res.get("results", res.get("worklogs", []))
+                        if isinstance(res, list):
+                            existing = res
+                except Exception as exc:
+                    logger.warning("Could not list worklogs for duplicate check: %s", exc)
+
+                resolved_entries = []
+                for entry in entries:
+                    ent_copy = dict(entry)
+                    if not ent_copy.get("issue_id") and ent_copy.get("issue"):
+                        try:
+                            res_id, _ = self.resolve_issue_and_account(issue=ent_copy["issue"])
+                            ent_copy["issue_id"] = res_id
+                        except Exception:
+                            pass
+                    resolved_entries.append(ent_copy)
+
+                unique_entries, dup_entries = find_duplicates(resolved_entries, existing)
+                if dup_entries:
+                    logger.info("Skipping %d duplicate entry/entries", len(dup_entries))
+                    for dup in dup_entries:
+                        lbl = dup.get("issue") or dup.get("issue_id") or "entry"
+                        failures.append(f"SKIPPED DUPLICATE ({lbl} on {dup.get('date')} {dup.get('time')})")
+                worklogs_to_process = unique_entries
+
+        if dry_run:
+            logger.info("Dry run mode: validated %d worklog entries without creating them.", len(worklogs_to_process))
+            return len(worklogs_to_process), 0, failures
+
+        for i, entry in enumerate(worklogs_to_process):
             label = entry.get("issue") or entry.get("issue_id") or f"entry #{i}"
             try:
                 hours = float(entry["hours"])
-                self.log_time(
+                res = self.log_time(
                     hours=hours,
                     issue=entry.get("issue"),
                     issue_id=entry.get("issue_id"),
@@ -179,11 +258,26 @@ class TempoService:
                     time=entry.get("time"),
                     description=entry.get("description", ""),
                 )
+                wl_id = res.get("tempoWorklogId")
+                if wl_id:
+                    created_worklog_ids.append(wl_id)
                 succeeded += 1
             except Exception as exc:
                 failed += 1
                 failures.append(f"{label}: {exc}")
                 logger.error("Failed to submit %s: %s", label, exc)
+
+                if rollback_on_error and created_worklog_ids:
+                    logger.warning("Rollback triggered: deleting %d created worklog(s)", len(created_worklog_ids))
+                    for w_id in created_worklog_ids:
+                        try:
+                            self.tempo_client.delete_worklog(w_id)
+                        except Exception as del_exc:
+                            logger.error("Failed to rollback worklog %s: %s", w_id, del_exc)
+                    failures.append(f"ROLLBACK: Deleted {len(created_worklog_ids)} worklog(s) created prior to failure.")
+                    succeeded = 0
+                    break
+
                 if stop_on_error:
                     break
 

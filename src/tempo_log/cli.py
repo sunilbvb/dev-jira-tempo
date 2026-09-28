@@ -10,6 +10,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .commands import (
+    run_batch,
+    run_create,
+    run_doctor,
+    run_from_worklog,
+    run_list,
+    run_update,
+)
 from .completion import generate_completion, get_recent_issues
 from .config import ConfigError, Settings, load_settings
 from .exceptions import TempoLogError, ValidationError
@@ -31,6 +39,8 @@ KEYRING_ALIAS_MAP = {
     "tempo": "TEMPO_API_TOKEN",
     "tempo_token": "TEMPO_API_TOKEN",
     "tempo_api_token": "TEMPO_API_TOKEN",
+    "tempo_base": "TEMPO_BASE_URL",
+    "tempo_base_url": "TEMPO_BASE_URL",
     "jira": "JIRA_API_TOKEN",
     "jira_token": "JIRA_API_TOKEN",
     "jira_api_token": "JIRA_API_TOKEN",
@@ -41,6 +51,11 @@ KEYRING_ALIAS_MAP = {
     "email": "JIRA_EMAIL",
     "account_id": "JIRA_ACCOUNT_ID",
     "jira_account_id": "JIRA_ACCOUNT_ID",
+    "daily_cap": "TEMPO_DAILY_CAP_HOURS",
+    "daily_cap_hours": "TEMPO_DAILY_CAP_HOURS",
+    "round_minutes": "TEMPO_ROUND_MINUTES",
+    "default_issue": "TEMPO_DEFAULT_ISSUE",
+    "meeting_issue": "TEMPO_MEETING_ISSUE",
 }
 
 
@@ -119,8 +134,58 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Abort the batch on the first failed entry (default: continue).",
     )
+    batch_parser.add_argument(
+        "--allow-duplicates",
+        action="store_true",
+        help="Bypass duplicate detection and submit all entries.",
+    )
+    batch_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate batch entries without submitting worklogs.",
+    )
+    batch_parser.add_argument(
+        "--rollback-on-error",
+        action="store_true",
+        help="Automatically delete created worklogs if batch encounters an error.",
+    )
 
-    # 5. doctor
+    # 5. from-worklog
+    from_worklog_parser = subparsers.add_parser(
+        "from-worklog",
+        help="Import and preview worklogs from a markdown journal file.",
+        description="Parse markdown worklogs (## YYYY-MM-DD heading, Tempo: KEY | HH:MM-HH:MM line, bullets).",
+    )
+    from_worklog_parser.add_argument("file", help="Path to markdown worklog file.")
+    from_worklog_parser.add_argument("-F", "--from", dest="from_date", help="Start date YYYY-MM-DD.")
+    from_worklog_parser.add_argument("-T", "--to", dest="to_date", help="End date YYYY-MM-DD.")
+    from_worklog_parser.add_argument(
+        "--submit",
+        action="store_true",
+        help="Submit worklogs to Tempo (default is preview only).",
+    )
+    from_worklog_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Abort submission if any daily cap or overlap warnings exist.",
+    )
+    from_worklog_parser.add_argument(
+        "--allow-duplicates",
+        action="store_true",
+        help="Bypass duplicate detection and submit all entries.",
+    )
+    from_worklog_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate worklog entries without submitting to Tempo.",
+    )
+    from_worklog_parser.add_argument(
+        "--rollback-on-error",
+        action="store_true",
+        help="Automatically delete created worklogs if batch encounters an error.",
+    )
+
+    # 6. doctor
     subparsers.add_parser(
         "doctor", help="Check that Tempo (and Jira, if configured) credentials work."
     )
@@ -218,117 +283,6 @@ def _get_service(target: Settings | TempoService) -> Any:
     if isinstance(target, Settings):
         return TempoService.from_settings(target)
     return target
-
-
-def run_create(args: argparse.Namespace, target: Settings | TempoService) -> int:
-    if args.hours <= 0:
-        logger.error("Hours must be a positive number, got %s", args.hours)
-        return 1
-
-    service = _get_service(target)
-    try:
-        issue_id, account_id = service.resolve_issue_and_account(
-            issue=args.issue, issue_id=args.issue_id, account_id=args.account_id
-        )
-        log_kwargs: dict[str, Any] = {
-            "hours": args.hours,
-            "issue_id": issue_id,
-            "account_id": account_id,
-            "date": args.date,
-            "time": args.time,
-            "description": args.description,
-        }
-        if args.issue:
-            log_kwargs["issue"] = args.issue
-        result = service.log_time(**log_kwargs)
-    except (TempoLogError, ValueError) as exc:
-        logger.error(str(exc))
-        return 1
-
-    worklog_id = result.get("tempoWorklogId")
-    print(f"Logged {args.hours}h on issue {issue_id}. Tempo worklog ID: {worklog_id}")
-    return 0
-
-
-def run_batch(args: argparse.Namespace, target: Settings | TempoService) -> int:
-    try:
-        with open(args.file, encoding="utf-8") as f:
-            entries = json.load(f)
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.error("Failed to read %s: %s", args.file, exc)
-        return 1
-
-    if not isinstance(entries, list):
-        logger.error("Batch file must contain a JSON list of entries.")
-        return 1
-
-    service = _get_service(target)
-    succeeded, failed, failures = service.batch_log(
-        entries, stop_on_error=args.stop_on_error
-    )
-
-    print(f"\n{succeeded} succeeded, {failed} failed.")
-    if failures:
-        print("Failures:")
-        for line in failures:
-            print(f"  - {line}")
-    print(f"Journal: {journal_path()}")
-    return 1 if failed else 0
-
-
-def run_doctor(target: Settings | TempoService) -> int:
-    service = _get_service(target)
-    report = service.check_health()
-
-    if report["tempo_ok"]:
-        print("Tempo: OK (TEMPO_API_TOKEN authenticates).")
-    else:
-        print(f"Tempo: FAILED - {report['tempo_message']}")
-
-    if report["jira_ok"] is True:
-        print(f"Jira: OK ({report['jira_message']}).")
-    elif report["jira_ok"] is False:
-        print(f"Jira: FAILED - {report['jira_message']}")
-    else:
-        print("Jira: not configured (JIRA_BASE_URL/JIRA_EMAIL/JIRA_API_TOKEN unset).")
-
-    if report["default_account_id"]:
-        print(f"JIRA_ACCOUNT_ID: set ({report['default_account_id']}).")
-    else:
-        print("JIRA_ACCOUNT_ID: not set.")
-
-    ok = report["tempo_ok"] and (report["jira_ok"] is not False)
-    return 0 if ok else 1
-
-
-def run_list(args: argparse.Namespace, target: Settings | TempoService) -> int:
-    service = _get_service(target)
-    try:
-        result = service.list_time(
-            account_id=args.account_id,
-            from_date=args.from_date,
-            to_date=args.to_date,
-            limit=args.limit,
-            offset=args.offset,
-        )
-    except (TempoLogError, ValueError) as exc:
-        logger.error(str(exc))
-        return 1
-
-    for entry in result.get("results", []):
-        issue_id = entry.get("issue", {}).get("id")
-        hours = entry.get("timeSpentSeconds", 0) / 3600
-        print(
-            f"{entry.get('tempoWorklogId')}\t{entry.get('startDate')} "
-            f"{entry.get('startTime')}\tissue={issue_id}\t{hours}h\t"
-            f"{entry.get('description', '')}"
-        )
-    total = result.get("metadata", {}).get("count", len(result.get("results", [])))
-    print(f"\n{total} worklog(s) shown (limit={args.limit}, offset={args.offset}).")
-    return 0
-
-
-def run_update(args: argparse.Namespace, target: Settings | TempoService) -> int:
     service = _get_service(target)
     try:
         service.update_time(
@@ -614,6 +568,8 @@ def run(args: argparse.Namespace) -> int:
         return run_update(args, service)
     if args.command == "batch":
         return run_batch(args, service)
+    if args.command == "from-worklog":
+        return run_from_worklog(args, service)
     if args.command == "doctor":
         return run_doctor(service)
     if args.command == "stop":

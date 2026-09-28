@@ -9,6 +9,8 @@ import requests
 
 from .config import JiraConfig
 from .exceptions import JiraClientError
+from .issue_cache import IssueCache
+from .tempo_client import create_retrying_session
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +18,15 @@ REQUEST_TIMEOUT_SECONDS = 10
 
 
 class JiraClient:
-    def __init__(self, config: JiraConfig, session: requests.Session | None = None):
+    def __init__(
+        self,
+        config: JiraConfig,
+        session: requests.Session | None = None,
+        cache: IssueCache | None = None,
+    ):
         self._config = config
-        self._session = session or requests.Session()
+        self._session = session if session is not None else create_retrying_session()
+        self.cache = cache if cache is not None else IssueCache()
 
         # Jira Server / Data Center uses Bearer PAT auth, while Jira Cloud uses Basic Auth
         if config.is_server or not config.email:
@@ -38,6 +46,12 @@ class JiraClient:
 
     def resolve_issue_id(self, issue_key: str) -> int:
         """Resolve an issue key (e.g. PROJ-123) to its internal numeric issue ID."""
+        if self.cache:
+            cached_id = self.cache.get(issue_key)
+            if cached_id is not None:
+                logger.debug("Cache hit for issue key %s -> %s", issue_key, cached_id)
+                return cached_id
+
         url = f"{self._config.base_url}/rest/api/{self.api_version}/issue/{issue_key}"
         logger.debug("Resolving issue id for %s at %s", issue_key, url)
         response = self._session.get(
@@ -52,10 +66,16 @@ class JiraClient:
                 fallback_url, params={"fields": "id"}, timeout=REQUEST_TIMEOUT_SECONDS
             )
             if fallback_response.ok:
-                return int(fallback_response.json()["id"])
+                issue_id = int(fallback_response.json()["id"])
+                if self.cache:
+                    self.cache.set(issue_key, issue_id)
+                return issue_id
 
         self._raise_for_status(response, f"resolve issue '{issue_key}'")
-        return int(response.json()["id"])
+        issue_id = int(response.json()["id"])
+        if self.cache:
+            self.cache.set(issue_key, issue_id)
+        return issue_id
 
     def get_current_account_id(self) -> str:
         """Resolve current authenticated user's account ID (or key/name in Jira Server/DC)."""
