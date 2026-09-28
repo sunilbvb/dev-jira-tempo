@@ -97,3 +97,31 @@ def test_serve_static_index_html(server):
     assert resp.status_code == 200
     assert "dev-jira-tempo" in resp.text
     assert "ui.css" in resp.text
+
+
+def test_no_wildcard_cors(server):
+    resp = requests.get(f"{server}/api/health")
+    assert "Access-Control-Allow-Origin" not in resp.headers
+
+
+def test_web_auth_token_protection(server):
+    with mock.patch.dict("os.environ", {"TEMPO_WEB_TOKEN": "secret-token-123"}):
+        # 1. Unauthenticated request should fail with 401
+        unauth_resp = requests.get(f"{server}/api/health")
+        assert unauth_resp.status_code == 401
+        assert "Unauthorized" in unauth_resp.json()["error"]
+
+        # 2. Authenticated request with Bearer header should succeed
+        auth_resp = requests.get(
+            f"{server}/api/health",
+            headers={"Authorization": "Bearer secret-token-123"},
+        )
+        assert auth_resp.status_code == 200
+
+        # 3. Authenticated request with X-Auth-Token header should succeed
+        xauth_resp = requests.get(
+            f"{server}/api/health",
+            headers={"X-Auth-Token": "secret-token-123"},
+        )
+        assert xauth_resp.status_code == 200
+

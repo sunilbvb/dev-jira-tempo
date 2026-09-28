@@ -25,28 +25,46 @@ from .timer import get_active_timer, start_timer, stop_timer
 
 logger = logging.getLogger(__name__)
 
-# Web static paths: prefer frontend/ directory, fallback to package static
+# Web static paths: single canonical frontend/ directory
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
-FALLBACK_STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
 
 
 def get_static_dir() -> Path:
-    if FRONTEND_DIR.exists() and (FRONTEND_DIR / "index.html").exists():
-        return FRONTEND_DIR
-    return FALLBACK_STATIC_DIR
+    return FRONTEND_DIR
 
 
 class TempoWebHandler(BaseHTTPRequestHandler):
     server_version = "TempoLogWeb/0.2.0"
+
+    def _check_token_auth(self) -> bool:
+        expected_token = os.environ.get("TEMPO_WEB_TOKEN") or os.environ.get("WEB_AUTH_TOKEN")
+        if not expected_token:
+            return True
+
+        auth_header = self.headers.get("Authorization", "")
+        api_token_header = self.headers.get("X-Auth-Token", "")
+        parsed = urllib.parse.urlparse(self.path)
+        query_params = urllib.parse.parse_qs(parsed.query)
+        token_param = query_params.get("token", [None])[0]
+
+        provided_token = None
+        if auth_header.startswith("Bearer "):
+            provided_token = auth_header[7:].strip()
+        elif api_token_header:
+            provided_token = api_token_header.strip()
+        elif token_param:
+            provided_token = token_param.strip()
+
+        if provided_token != expected_token:
+            self._send_error("Unauthorized: Invalid or missing token", HTTPStatus.UNAUTHORIZED)
+            return False
+        return True
 
     def _send_json(self, data: Any, status: int = HTTPStatus.OK) -> None:
         payload = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(payload)
 
@@ -62,13 +80,10 @@ class TempoWebHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
 
     def do_HEAD(self) -> None:
         self.do_GET()
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
@@ -76,24 +91,27 @@ class TempoWebHandler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed.query)
 
         # 1. API Endpoints
-        if path == "/api/health":
-            self._handle_health()
-            return
-        if path == "/api/config":
-            self._handle_get_config()
-            return
-        if path == "/api/timer":
-            self._handle_get_timer()
-            return
-        if path == "/api/summary":
-            self._handle_summary(query)
-            return
-        if path == "/api/worklogs":
-            self._handle_get_worklogs(query)
-            return
-        if path == "/api/export-csv":
-            self._handle_export_csv()
-            return
+        if path.startswith("/api/"):
+            if not self._check_token_auth():
+                return
+            if path == "/api/health":
+                self._handle_health()
+                return
+            if path == "/api/config":
+                self._handle_get_config()
+                return
+            if path == "/api/timer":
+                self._handle_get_timer()
+                return
+            if path == "/api/summary":
+                self._handle_summary(query)
+                return
+            if path == "/api/worklogs":
+                self._handle_get_worklogs(query)
+                return
+            if path == "/api/export-csv":
+                self._handle_export_csv()
+                return
 
         # 2. Static File Serving
         self._serve_static(path)
@@ -101,6 +119,10 @@ class TempoWebHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        if path.startswith("/api/"):
+            if not self._check_token_auth():
+                return
 
         try:
             body = self._read_json_body()
@@ -392,11 +414,11 @@ class TempoWebHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 
-def run_server(port: int = 18114, host: str = "0.0.0.0") -> None:
+def run_server(port: int = 18114, host: str = "127.0.0.1") -> None:
     """Start the HTTP server on specified host and port."""
     server_address = (host, port)
     httpd = ThreadingHTTPServer(server_address, TempoWebHandler)
-    logger.info("Tempo Web Console running on http://%s:%s", host if host != "0.0.0.0" else "localhost", port)
+    logger.info("Tempo Web Console running on http://%s:%s", host if host != "127.0.0.1" else "localhost", port)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

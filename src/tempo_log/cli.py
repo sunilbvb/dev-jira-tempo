@@ -155,7 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     # 10. ui / web (Interactive Web Console)
     ui_parser = subparsers.add_parser("ui", help="Launch Tempo Web Console (HTML dashboard).")
     ui_parser.add_argument("--port", type=int, default=18114, help="Port to serve on (default: 18114).")
-    ui_parser.add_argument("--host", default="0.0.0.0", help="Host interface (default: 0.0.0.0).")
+    ui_parser.add_argument("--host", default="127.0.0.1", help="Host interface (default: 127.0.0.1).")
     ui_parser.add_argument("--terminal", action="store_true", help="Launch terminal TUI instead of web dashboard.")
     ui_parser.add_argument("--once", action="store_true", help="Print terminal dashboard snapshot and exit.")
 
@@ -457,7 +457,7 @@ def run_ui(args: argparse.Namespace, target: Settings | TempoService | None = No
         return run_tui(args, target)
 
     port = getattr(args, "port", 18114)
-    host = getattr(args, "host", "0.0.0.0")
+    host = getattr(args, "host", "127.0.0.1")
     print(f"🚀 Starting Tempo Web Console on http://localhost:{port} (host: {host})")
     print("Press Ctrl+C to stop.")
     try:

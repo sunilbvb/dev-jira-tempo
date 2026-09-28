@@ -99,7 +99,10 @@ git clone https://github.com/sunilbvb/dev-jira-tempo.git
 cd dev-jira-tempo
 python3 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip  # Recommended for older pip versions (pip < 22) with editable installs
 pip install -e ".[dev]"
+# Alternative without editable install:
+# export PYTHONPATH=src
 ```
 
 ---
