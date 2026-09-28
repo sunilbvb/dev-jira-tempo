@@ -36,6 +36,16 @@ async function initApp() {
     }
 }
 
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function showToast(msg, type = "info") {
     const container = document.getElementById("toast-container");
     if (!container) return;
@@ -56,7 +66,9 @@ function showToast(msg, type = "info") {
         box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         animation: fadeIn 0.2s ease-out;
     `;
-    toast.innerHTML = `<span>${msg}</span>`;
+    const span = document.createElement("span");
+    span.textContent = msg;
+    toast.appendChild(span);
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -214,7 +226,10 @@ function renderTimerWidget(timer) {
 
     if (timer && timer.active) {
         display.textContent = timer.formatted_duration || "00:00:00";
-        label.innerHTML = `<strong>${timer.issue || timer.issue_id}</strong> &bull; Billable: ~${timer.elapsed_hours}h <br><span style="color:#94a3b8;font-size:12px">${timer.description || 'No description'}</span>`;
+        const issueEsc = escapeHtml(timer.issue || timer.issue_id || "");
+        const descEsc = escapeHtml(timer.description || "No description");
+        const hoursEsc = escapeHtml(timer.elapsed_hours ?? 0);
+        label.innerHTML = `<strong>${issueEsc}</strong> &bull; Billable: ~${hoursEsc}h <br><span style="color:#94a3b8;font-size:12px">${descEsc}</span>`;
         if (startBtn) startBtn.style.display = "none";
         if (stopBtn) stopBtn.style.display = "inline-flex";
         if (discardBtn) discardBtn.style.display = "inline-flex";
@@ -403,7 +418,7 @@ function renderSummaryMetrics(summary) {
                 item.style.marginBottom = "10px";
                 item.innerHTML = `
                     <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
-                        <span style="font-weight:600;color:#c7d2fe">${key}</span>
+                        <span style="font-weight:600;color:#c7d2fe">${escapeHtml(key)}</span>
                         <span style="color:#94a3b8">${hrs.toFixed(2)}h (${pct}%)</span>
                     </div>
                     <div class="ui-progress" style="height:6px">

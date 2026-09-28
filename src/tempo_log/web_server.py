@@ -53,7 +53,9 @@ class TempoWebHandler(BaseHTTPRequestHandler):
         elif api_token_header:
             provided_token = api_token_header.strip()
 
-        if not provided_token or not hmac.compare_digest(provided_token, expected_token):
+        if not provided_token or not hmac.compare_digest(
+            provided_token.encode("utf-8"), expected_token.encode("utf-8")
+        ):
             self._send_error("Unauthorized: Invalid or missing token", HTTPStatus.UNAUTHORIZED)
             return False
         return True

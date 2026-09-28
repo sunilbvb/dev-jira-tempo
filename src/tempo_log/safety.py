@@ -12,7 +12,7 @@ def round_duration(hours: float, round_minutes: int | None = None) -> float:
 
     If round_minutes is None or <= 0, returns original hours.
     """
-    if not round_minutes or round_minutes <= 0:
+    if hours <= 0 or not round_minutes or round_minutes <= 0:
         return hours
 
     mins = hours * 60.0
@@ -36,8 +36,12 @@ def _normalize_time(t_str: str) -> str:
 def _time_to_minutes(t_str: str) -> int:
     """Convert HH:MM or HH:MM:SS string to minutes from midnight."""
     norm = _normalize_time(t_str)
-    h, m, s = map(int, norm.split(":"))
-    return h * 60 + m
+    try:
+        parts = norm.split(":")
+        h, m = int(parts[0]), int(parts[1])
+        return (h * 60 + m) % (24 * 60)
+    except (ValueError, IndexError):
+        return 0
 
 
 def _minutes_to_time(mins: int) -> str:
@@ -47,6 +51,24 @@ def _minutes_to_time(mins: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
+def _extract_issue_id(entry: dict[str, Any]) -> int | str | None:
+    """Safely extract issue identifier (numeric id or string key) from a dict."""
+    issue_val = entry.get("issue")
+    issue_id = None
+    if isinstance(issue_val, dict):
+        issue_id = issue_val.get("id")
+    elif issue_val is not None:
+        issue_id = issue_val
+    if not issue_id:
+        issue_id = entry.get("issue_id") or entry.get("issueId")
+    if issue_id is not None:
+        try:
+            return int(issue_id)
+        except (ValueError, TypeError):
+            return str(issue_id)
+    return None
+
+
 def find_duplicates(
     candidate_entries: list[dict[str, Any]],
     existing_worklogs: list[dict[str, Any]],
@@ -54,30 +76,32 @@ def find_duplicates(
     """Compare candidate entries against existing Tempo worklogs.
 
     Returns tuple of (unique_entries, duplicate_entries). Matching is based on
-    (issue_id, start_date, start_time).
+    (issue_id, start_date, start_time). Intra-batch duplicates within candidates are also caught.
     """
-    existing_set: set[tuple[int | None, str, str]] = set()
+    existing_set: set[tuple[int | str | None, str, str]] = set()
 
     for wl in existing_worklogs:
-        issue_id = wl.get("issue", {}).get("id") or wl.get("issueId")
+        issue_id = _extract_issue_id(wl)
         date = wl.get("startDate") or wl.get("date")
         time_str = _normalize_time(wl.get("startTime") or wl.get("time") or "")
         if date:
-            existing_set.add((int(issue_id) if issue_id else None, str(date), time_str))
+            existing_set.add((issue_id, str(date), time_str))
 
     unique: list[dict[str, Any]] = []
     duplicates: list[dict[str, Any]] = []
+    seen_keys: set[tuple[int | str | None, str, str]] = set()
 
     for entry in candidate_entries:
-        issue_id = entry.get("issue_id") or entry.get("issueId")
+        issue_id = _extract_issue_id(entry)
         date = entry.get("date") or entry.get("startDate")
         time_str = _normalize_time(entry.get("time") or entry.get("startTime") or "")
 
-        key = (int(issue_id) if issue_id else None, str(date) if date else "", time_str)
-        if key in existing_set:
+        key = (issue_id, str(date) if date else "", time_str)
+        if key in existing_set or key in seen_keys:
             duplicates.append(entry)
         else:
             unique.append(entry)
+            seen_keys.add(key)
 
     return unique, duplicates
 
@@ -101,14 +125,20 @@ def validate_submission_safety(
     for wl in existing:
         date = str(wl.get("startDate") or wl.get("date") or "")
         sec = wl.get("timeSpentSeconds")
-        h = float(sec) / 3600.0 if sec is not None else float(wl.get("hours", 0))
+        try:
+            h = float(sec) / 3600.0 if sec is not None else float(wl.get("hours", 0) or 0)
+        except (ValueError, TypeError):
+            h = 0.0
         if date:
             daily_hours[date] = daily_hours.get(date, 0.0) + h
             daily_existing_hours[date] = daily_existing_hours.get(date, 0.0) + h
 
     for entry in candidate_entries:
         date = str(entry.get("date") or entry.get("startDate") or "")
-        h = float(entry.get("hours", 0))
+        try:
+            h = float(entry.get("hours", 0) or 0)
+        except (ValueError, TypeError):
+            h = 0.0
         if date:
             daily_hours[date] = daily_hours.get(date, 0.0) + h
 
@@ -130,8 +160,16 @@ def validate_submission_safety(
         if not date:
             continue
         sec = wl.get("timeSpentSeconds")
-        h = float(sec) / 3600.0 if sec is not None else float(wl.get("hours", 0))
-        t_str = str(wl.get("startTime") or wl.get("time") or "00:00:00")
+        try:
+            h = float(sec) / 3600.0 if sec is not None else float(wl.get("hours", 0) or 0)
+        except (ValueError, TypeError):
+            h = 0.0
+        if h <= 0:
+            continue
+        raw_t = wl.get("startTime") or wl.get("time")
+        if not raw_t:
+            continue
+        t_str = str(raw_t)
         label = f"Existing worklog #{wl.get('id', wl.get('tempoWorklogId', ''))}"
         by_date.setdefault(date, []).append(
             {"label": label, "start": _time_to_minutes(t_str), "hours": h, "time_str": t_str}
@@ -141,8 +179,16 @@ def validate_submission_safety(
         date = str(entry.get("date") or entry.get("startDate") or "")
         if not date:
             continue
-        h = float(entry.get("hours", 0))
-        t_str = str(entry.get("time") or entry.get("startTime") or "00:00:00")
+        try:
+            h = float(entry.get("hours", 0) or 0)
+        except (ValueError, TypeError):
+            h = 0.0
+        if h <= 0:
+            continue
+        raw_t = entry.get("time") or entry.get("startTime")
+        if not raw_t:
+            continue
+        t_str = str(raw_t)
         issue_label = entry.get("issue") or entry.get("issue_id") or f"Entry #{i+1}"
         by_date.setdefault(date, []).append(
             {"label": str(issue_label), "start": _time_to_minutes(t_str), "hours": h, "time_str": t_str}

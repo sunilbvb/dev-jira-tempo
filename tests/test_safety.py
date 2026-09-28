@@ -75,3 +75,22 @@ def test_validate_submission_safety_overlap():
     warnings = validate_submission_safety(candidates, existing_worklogs=[], daily_cap_hours=None)
     assert len(warnings) == 1
     assert "Time overlap between 'PROJ-1'" in warnings[0]
+
+
+def test_find_duplicates_intra_candidate_and_string_keys():
+    existing = [
+        {"issue": "PROJ-100", "startDate": "2026-09-24", "startTime": "10:00:00"},
+    ]
+    candidates = [
+        {"issue": "PROJ-100", "date": "2026-09-24", "time": "10:00:00", "label": "dup_existing"},
+        {"issue": "PROJ-200", "date": "2026-09-24", "time": "11:00:00", "label": "candidate_1"},
+        {"issue": "PROJ-200", "date": "2026-09-24", "time": "11:00:00", "label": "candidate_2_dup_internal"},
+    ]
+    unique, dups = find_duplicates(candidates, existing)
+    assert len(unique) == 1
+    assert unique[0]["label"] == "candidate_1"
+    assert len(dups) == 2
+    dup_labels = [d["label"] for d in dups]
+    assert "dup_existing" in dup_labels
+    assert "candidate_2_dup_internal" in dup_labels
+

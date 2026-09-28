@@ -26,10 +26,10 @@ class WorklogParseResult:
 
 
 TEMPO_LINE_REGEX = re.compile(
-    r"^Tempo:\s*([^\s|]+)\s*\|\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s*$",
+    r"^Tempo:\s*([^\s|]+)\s*\|\s*(\d{1,2}:\d{2})\s*[-\u2013\u2014]\s*(\d{1,2}:\d{2})\s*$",
     re.IGNORECASE,
 )
-DATE_HEADING_REGEX = re.compile(r"^##\s*(\d{4}-\d{2}-\d{2})")
+DATE_HEADING_REGEX = re.compile(r"^#+\s*(\d{4}-\d{2}-\d{2})")
 
 
 def parse_markdown_worklog(content: str) -> WorklogParseResult:

@@ -154,4 +154,19 @@ def test_web_auth_token_protection(server):
         assert no_conf_resp.status_code == 401
         assert "not configured" in no_conf_resp.json()["error"]
 
+    # 7. Non-ASCII provided token (e.g. latin-1 chars like 'töken') does not crash hmac.compare_digest
+    non_ascii_resp = requests.get(
+        f"{server}/api/health",
+        headers={"Authorization": "Bearer invalid-töken"},
+    )
+    assert non_ascii_resp.status_code == 401
+
+    # 8. Non-ASCII configured token matches correctly without TypeError
+    with mock.patch.dict("os.environ", {"TEMPO_WEB_TOKEN": "utf8-töken-secret"}):
+        valid_unicode_resp = requests.get(
+            f"{server}/api/health",
+            headers={"Authorization": "Bearer utf8-töken-secret"},
+        )
+        assert valid_unicode_resp.status_code == 200
+
 

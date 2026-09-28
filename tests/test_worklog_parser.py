@@ -56,3 +56,16 @@ Tempo: PROJ-100 | 10:00-11:00
     res = parse_markdown_worklog(content)
     assert len(res.errors) == 1
     assert "before any valid" in res.errors[0]
+
+
+def test_parse_en_dash_and_heading_variants():
+    content = """
+# 2026-09-25
+Tempo: PROJ-555 | 09:00 \u2013 10:30
+- Handled en-dash time separator
+"""
+    res = parse_markdown_worklog(content)
+    assert len(res.errors) == 0
+    assert len(res.entries) == 1
+    assert res.entries[0].issue == "PROJ-555"
+    assert pytest.approx(res.entries[0].hours, 0.001) == 1.5
