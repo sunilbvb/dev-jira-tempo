@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import mimetypes
 import os
+import secrets
 import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,23 +41,19 @@ class TempoWebHandler(BaseHTTPRequestHandler):
     def _check_token_auth(self) -> bool:
         expected_token = os.environ.get("TEMPO_WEB_TOKEN") or os.environ.get("WEB_AUTH_TOKEN")
         if not expected_token:
-            return True
+            self._send_error("Unauthorized: Server auth token required but not configured", HTTPStatus.UNAUTHORIZED)
+            return False
 
         auth_header = self.headers.get("Authorization", "")
         api_token_header = self.headers.get("X-Auth-Token", "")
-        parsed = urllib.parse.urlparse(self.path)
-        query_params = urllib.parse.parse_qs(parsed.query)
-        token_param = query_params.get("token", [None])[0]
 
         provided_token = None
         if auth_header.startswith("Bearer "):
             provided_token = auth_header[7:].strip()
         elif api_token_header:
             provided_token = api_token_header.strip()
-        elif token_param:
-            provided_token = token_param.strip()
 
-        if provided_token != expected_token:
+        if not provided_token or not hmac.compare_digest(provided_token, expected_token):
             self._send_error("Unauthorized: Invalid or missing token", HTTPStatus.UNAUTHORIZED)
             return False
         return True
@@ -414,11 +412,19 @@ class TempoWebHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 
-def run_server(port: int = 18114, host: str = "127.0.0.1") -> None:
+def run_server(port: int = 18114, host: str = "127.0.0.1", token: str | None = None) -> None:
     """Start the HTTP server on specified host and port."""
+    if token:
+        os.environ["TEMPO_WEB_TOKEN"] = token
+    elif not os.environ.get("TEMPO_WEB_TOKEN") and not os.environ.get("WEB_AUTH_TOKEN"):
+        os.environ["TEMPO_WEB_TOKEN"] = secrets.token_hex(16)
+
+    active_token = os.environ.get("TEMPO_WEB_TOKEN") or os.environ.get("WEB_AUTH_TOKEN")
     server_address = (host, port)
     httpd = ThreadingHTTPServer(server_address, TempoWebHandler)
     logger.info("Tempo Web Console running on http://%s:%s", host if host != "127.0.0.1" else "localhost", port)
+    if active_token:
+        logger.info("Auth Token: %s", active_token)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

@@ -65,11 +65,39 @@ function showToast(msg, type = "info") {
     }, 4000);
 }
 
+// ----------------- Auth & API Helpers -----------------
+
+function getAuthToken() {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlToken = urlParams.get("token");
+        if (urlToken) {
+            sessionStorage.setItem("tempo_web_token", urlToken);
+            urlParams.delete("token");
+            const cleanQuery = urlParams.toString() ? "?" + urlParams.toString() : "";
+            const cleanUrl = window.location.pathname + cleanQuery + window.location.hash;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+    } catch (e) {
+        console.error("Token parse error:", e);
+    }
+    return sessionStorage.getItem("tempo_web_token") || "";
+}
+
+function apiFetch(url, options = {}) {
+    const token = getAuthToken();
+    const headers = Object.assign({}, options.headers || {});
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+    }
+    return fetch(url, Object.assign({}, options, { headers }));
+}
+
 // ----------------- API Calls -----------------
 
 async function loadHealth() {
     try {
-        const res = await fetch("/api/health");
+        const res = await apiFetch("/api/health");
         const data = await res.json();
         updateHealthBadges(data);
     } catch (err) {
@@ -107,7 +135,7 @@ function updateHealthBadges(data) {
 
 async function loadConfig() {
     try {
-        const res = await fetch("/api/config");
+        const res = await apiFetch("/api/config");
         currentConfig = await res.json();
         populateConfigModal(currentConfig);
     } catch (err) {
@@ -145,7 +173,7 @@ async function saveConfig() {
     };
 
     try {
-        const res = await fetch("/api/config", {
+        const res = await apiFetch("/api/config", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -168,7 +196,7 @@ async function saveConfig() {
 
 async function refreshTimer() {
     try {
-        const res = await fetch("/api/timer");
+        const res = await apiFetch("/api/timer");
         activeTimer = await res.json();
         renderTimerWidget(activeTimer);
     } catch (err) {
@@ -225,7 +253,7 @@ async function startNewTimer() {
     }
 
     try {
-        const res = await fetch("/api/timer/start", {
+        const res = await apiFetch("/api/timer/start", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ issue, description: desc }),
@@ -247,7 +275,7 @@ async function startNewTimer() {
 async function stopActiveTimer() {
     if (!confirm("Stop timer and submit worklog to Tempo?")) return;
     try {
-        const res = await fetch("/api/timer/stop", {
+        const res = await apiFetch("/api/timer/stop", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({}),
@@ -269,7 +297,7 @@ async function stopActiveTimer() {
 async function discardActiveTimer() {
     if (!confirm("Are you sure you want to discard this timer without logging?")) return;
     try {
-        const res = await fetch("/api/timer/discard", { method: "POST" });
+        const res = await apiFetch("/api/timer/discard", { method: "POST" });
         if (res.ok) {
             showToast("Timer discarded.", "info");
             refreshTimer();
@@ -298,7 +326,7 @@ async function submitQuickLog(e) {
     btn.textContent = "Logging to Tempo...";
 
     try {
-        const res = await fetch("/api/worklog", {
+        const res = await apiFetch("/api/worklog", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ issue, hours, date, description: desc }),
@@ -325,7 +353,7 @@ async function submitQuickLog(e) {
 
 async function refreshSummary() {
     try {
-        const res = await fetch("/api/summary");
+        const res = await apiFetch("/api/summary");
         currentSummary = await res.json();
         renderSummaryMetrics(currentSummary);
     } catch (err) {
@@ -390,7 +418,7 @@ function renderSummaryMetrics(summary) {
 
 async function refreshWorklogs() {
     try {
-        const res = await fetch("/api/worklogs?limit=15");
+        const res = await apiFetch("/api/worklogs?limit=15");
         const data = await res.json();
         renderWorklogTable(data.worklogs || []);
     } catch (err) {
@@ -411,11 +439,11 @@ function renderWorklogTable(logs) {
     logs.forEach((log) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-            <td style="font-weight:500;color:#94a3b8">${log.start_date || "-"}</td>
-            <td><span class="ui-badge ui-badge-primary">${log.issue_key || log.issue_id || "-"}</span></td>
+            <td style="font-weight:500;color:#94a3b8">${escapeHtml(log.start_date || "-")}</td>
+            <td><span class="ui-badge ui-badge-primary">${escapeHtml(log.issue_key || log.issue_id || "-")}</span></td>
             <td style="font-weight:600;color:#f8fafc">${(log.hours || 0).toFixed(2)}h</td>
-            <td style="color:#cbd5e1;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${log.description || ""}</td>
-            <td style="color:#64748b;font-size:12px">#${log.tempo_worklog_id || "-"}</td>
+            <td style="color:#cbd5e1;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(log.description || "")}</td>
+            <td style="color:#64748b;font-size:12px">#${escapeHtml(log.tempo_worklog_id || "-")}</td>
         `;
         tbody.appendChild(tr);
     });
