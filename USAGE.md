@@ -397,3 +397,37 @@ def handle_slack_time_command(user_slack_id, issue_key, hours, notes):
 ### Error 3: `401 Unauthorized`
 - **Reason**: Token is expired or incorrect.
 - **Fix**: Generate a fresh token in Tempo (**Tempo -> Settings -> API Integration -> New Token**).
+
+## Analyze a free-form session journal (`analyze`)
+
+`analyze` is a read-only pre-flight check for journals that don't use the strict
+`Tempo: KEY | HH:MM-HH:MM` format. It understands:
+
+```markdown
+## 2026-09-24 09:00 UTC — PROJ-1: add login banner
+Time estimate: 30m | Ticket: PROJ-1 [id:1001]
+- Added banner component
+
+## 2026-09-24 09:30 UTC — Batch fixing QA doc
+Time estimate: (logged per-ticket below)
+### PROJ-2 — fixed (15m)
+### PROJ-3 — fixed (1h, medium)
+
+## 2026-09-24 10:30 UTC — Onboarding fixes
+Time: 10:30–12:00 UTC (1h30m) | Ticket: none
+```
+
+```bash
+tempo-log analyze journal.md --date 2026-09-24            # report only
+tempo-log analyze journal.md -d 2026-09-24 --offline      # no Jira/Tempo calls
+tempo-log analyze journal.md -d 2026-09-24 --export ready.json
+tempo-log batch ready.json --dry-run                      # then upload for real
+```
+
+For each entry it shows READY / BLOCKED with the reason (missing ticket, missing
+numeric issue id, missing duration) and notes (rounding, repeated ticket,
+"already fixed" status, no bullet points). For the day it checks the total
+against `TEMPO_DAILY_CAP_HOURS`, estimates that are longer than the gap to the
+next entry, overlapping time ranges, and worklogs already in Tempo. It ends with
+concrete next steps. Nothing is sent to Tempo. `--strict` exits 1 if anything
+is blocked or warned, and `--json` prints the report as JSON.

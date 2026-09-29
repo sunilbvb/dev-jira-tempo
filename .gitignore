@@ -18,6 +18,7 @@ var/
 wheels/
 *.manifest
 *.spec
+*.zip
 
 # Virtual environments
 .venv/

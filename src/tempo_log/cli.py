@@ -14,6 +14,7 @@ from .commands import (
     run_batch,
     run_create,
     run_doctor,
+    run_analyze,
     run_from_worklog,
     run_list,
     run_update,
@@ -184,6 +185,36 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Automatically delete created worklogs if batch encounters an error.",
     )
+
+    # 5b. analyze
+    analyze_parser = subparsers.add_parser(
+        "analyze",
+        help="Analyze a free-form session journal for one day and show what would be logged.",
+        description=(
+            "Read-only report: parses '## YYYY-MM-DD HH:MM - title' sessions, 'Time estimate:'/'Time:' and "
+            "'Ticket: KEY [id:N]' lines, and '### KEY - status (15m)' sub-entries; flags missing tickets, "
+            "missing numeric issue ids, rounding, cap overruns, inflated estimates and overlaps."
+        ),
+    )
+    analyze_parser.add_argument("file", help="Path to the markdown journal.")
+    analyze_parser.add_argument("-d", "--date", help="Day to analyze, YYYY-MM-DD (default: today).")
+    analyze_parser.add_argument("--round-minutes", type=int, help="Round-up step (default: TEMPO_ROUND_MINUTES or 15).")
+    analyze_parser.add_argument("--cap", type=float, help="Daily cap in hours (default: TEMPO_DAILY_CAP_HOURS).")
+    analyze_parser.add_argument("--offline", action="store_true", help="Skip Jira/Tempo lookups; use file and cache only.")
+    analyze_parser.add_argument("--json", action="store_true", help="Print the report as JSON.")
+    analyze_parser.add_argument("--export", metavar="FILE", help="Write READY entries as a 'batch' JSON file.")
+    analyze_parser.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Lay READY entries out back to back, start times snapped to the rounding step.",
+    )
+    analyze_parser.add_argument(
+        "--reserve",
+        action="append",
+        metavar="HH:MM-HH:MM",
+        help="Keep a slot free when laying out (e.g. a meeting). Repeatable.",
+    )
+    analyze_parser.add_argument("--strict", action="store_true", help="Exit 1 if anything is blocked or warned.")
 
     # 6. doctor
     subparsers.add_parser(
@@ -551,6 +582,9 @@ def run(args: argparse.Namespace) -> int:
     if args.command == "git-hook" and args.hook_action == "run":
         return run_hook_command(args)
 
+    if args.command == "analyze" and args.offline:
+        return run_analyze(args, None)
+
     # Commands that strictly require credentials
     try:
         settings = load_settings()
@@ -570,6 +604,8 @@ def run(args: argparse.Namespace) -> int:
         return run_batch(args, service)
     if args.command == "from-worklog":
         return run_from_worklog(args, service)
+    if args.command == "analyze":
+        return run_analyze(args, service)
     if args.command == "doctor":
         return run_doctor(service)
     if args.command == "stop":
