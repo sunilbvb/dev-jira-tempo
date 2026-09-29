@@ -170,3 +170,68 @@ def test_web_auth_token_protection(server):
         assert valid_unicode_resp.status_code == 200
 
 
+def test_api_analyze_endpoint(server, auth_headers):
+    # 1. Missing content/file -> 400
+    resp_empty = requests.post(f"{server}/api/analyze", json={}, headers=auth_headers)
+    assert resp_empty.status_code == 400
+    assert "Provide 'content' or 'file'" in resp_empty.json()["error"]
+
+    # 2. Valid markdown journal content
+    journal_text = (
+        "## 2026-03-30 09:00 UTC — PROJ-101: Core engine development\n"
+        "Time estimate: 1h 30m | Ticket: PROJ-101\n\n"
+        "- Implemented engine\n\n"
+        "## 2026-03-30 10:30 UTC — Meeting: Daily standup\n"
+        "Time estimate: 30m\n\n"
+        "- Daily sync\n"
+    )
+    payload = {
+        "content": journal_text,
+        "date": "2026-03-30",
+        "offline": True,
+        "round_minutes": 15,
+        "trim": True,
+        "cap": 8.0,
+    }
+    resp = requests.post(f"{server}/api/analyze", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["date"] == "2026-03-30"
+    assert data["total_minutes"] == 120
+    assert len(data["entries"]) == 2
+    assert data["entries"][0]["ticket"] == "PROJ-101"
+
+
+def test_api_analyze_submit_endpoint(server, auth_headers):
+    # 1. Empty entries list -> 400
+    resp_empty = requests.post(f"{server}/api/analyze/submit", json={"entries": []}, headers=auth_headers)
+    assert resp_empty.status_code == 400
+    assert "No entries provided" in resp_empty.json()["error"]
+
+    # 2. Valid entries submission with mocked service
+    mock_service = mock.MagicMock()
+    mock_service.batch_log.return_value = (1, 0, [])
+
+    with mock.patch("tempo_log.web_server.TempoWebHandler._get_service", return_value=mock_service):
+        payload = {
+            "entries": [
+                {
+                    "issue": "PROJ-101",
+                    "hours": 1.5,
+                    "date": "2026-03-30",
+                    "time": "09:00:00",
+                    "description": "Core engine development",
+                }
+            ]
+        }
+        resp = requests.post(f"{server}/api/analyze/submit", json=payload, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["succeeded"] == 1
+        assert data["failed"] == 0
+        mock_service.batch_log.assert_called_once()
+
+
+

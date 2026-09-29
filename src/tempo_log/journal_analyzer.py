@@ -498,6 +498,7 @@ def analyze_day(
     allow_overlap: bool = False,
     drop_patterns: list[str] | None = None,
     max_bullets: int = 4,
+    trim: bool = False,
 ) -> AnalysisReport:
     """Build a pre-submission report for one date. Pure: no network unless resolver does it."""
     report = AnalysisReport(date=date, cap_hours=daily_cap_hours)
@@ -803,9 +804,52 @@ def analyze_day(
     if daily_cap_hours:
         cap = int(daily_cap_hours * 60)
         if grand > cap:
-            report.day_warnings.append(
-                f"Day total {_fmt_minutes(grand)} exceeds the {daily_cap_hours:g}h cap by {_fmt_minutes(grand - cap)} - trim before submitting."
-            )
+            excess = grand - cap
+            candidates = [
+                p for p in report.planned
+                if p.status == "READY" and not p.entry.is_meeting and p.rounded_minutes and p.rounded_minutes > 0
+            ]
+            candidates.sort(key=lambda p: (p.rounded_minutes or 0, p.entry.line_number))
+
+            if trim and candidates:
+                remaining_excess = excess
+                for p in candidates:
+                    if remaining_excess <= 0:
+                        break
+                    min_floor = round_minutes or 15
+                    can_reduce = (
+                        (p.rounded_minutes or 0) - min_floor
+                        if (p.rounded_minutes or 0) > min_floor
+                        else (p.rounded_minutes or 0)
+                    )
+                    reduction = min(remaining_excess, can_reduce)
+                    if reduction > 0:
+                        orig = p.rounded_minutes or 0
+                        p.rounded_minutes = orig - reduction
+                        remaining_excess -= reduction
+                        p.notes.append(
+                            f"Auto-trimmed {_fmt_minutes(orig)} -> {_fmt_minutes(p.rounded_minutes)} to fit {daily_cap_hours:g}h cap"
+                        )
+
+                report.total_minutes = sum(p.rounded_minutes or 0 for p in report.planned)
+                report.ready_minutes = sum(p.rounded_minutes or 0 for p in report.ready)
+                grand = report.total_minutes + report.existing_minutes
+                if sequential and 'layout_reserved' in locals():
+                    _layout_sequential(report, round_minutes or 15, layout_reserved)
+
+            if grand > cap:
+                report.day_warnings.append(
+                    f"Day total {_fmt_minutes(grand)} exceeds the {daily_cap_hours:g}h cap by {_fmt_minutes(grand - cap)} - trim before submitting."
+                )
+            elif excess > 0:
+                report.day_info.append(
+                    f"Day total was trimmed by {_fmt_minutes(excess)} to fit within the {daily_cap_hours:g}h cap."
+                )
+
+            if not trim and candidates:
+                report.next_steps.append(
+                    f"Proposed trim: shorten '{_short(candidates[0].entry.title)}' by {_fmt_minutes(excess)} (or run with --trim to apply automatically)."
+                )
 
     starts = [e.start for e in day if e.start]
     if starts:

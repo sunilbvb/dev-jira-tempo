@@ -435,3 +435,66 @@ def test_f9_f10_plugins_and_ticket_mapping(tmp_path):
 
     meetings = find_meetings("2026-09-24")
     assert isinstance(meetings, list)
+
+
+def test_auto_trim_to_daily_cap():
+    content = """
+## 2026-09-24 09:00 UTC — PROJ-1: short task
+Time estimate: 45m | Ticket: PROJ-1 [id:1]
+
+## 2026-09-24 10:00 UTC — PROJ-2: longer task
+Time estimate: 2h | Ticket: PROJ-2 [id:2]
+
+## 2026-09-24 13:00 UTC — Meeting: Standup
+Time: 13:00–13:30 UTC (30m) | Ticket: MEET-1 [id:3]
+"""
+    entries = parse_journal(content)
+    # Total = 45m + 120m + 30m = 195m (3h15m)
+    # With cap = 3.0h (180m), excess is 15m
+    rep_notrim = analyze_day(entries, "2026-09-24", daily_cap_hours=3.0, trim=False)
+    assert any("exceeds the 3h cap" in w for w in rep_notrim.day_warnings)
+    assert any("Proposed trim" in s for s in rep_notrim.next_steps)
+
+    # With trim=True, shortest non-meeting entry (PROJ-1: 45m) is trimmed by 15m -> 30m
+    rep_trimmed = analyze_day(entries, "2026-09-24", daily_cap_hours=3.0, trim=True)
+    assert not any("exceeds" in w for w in rep_trimmed.day_warnings)
+    by_ticket = {p.entry.ticket: p for p in rep_trimmed.planned}
+    assert by_ticket["PROJ-1"].rounded_minutes == 30
+    assert any("Auto-trimmed" in n for n in by_ticket["PROJ-1"].notes)
+    # Meeting was untouched
+    assert by_ticket["MEET-1"].rounded_minutes == 30
+    # Day total is now exactly 3h (180m)
+    assert rep_trimmed.total_minutes == 180
+
+
+def test_multi_day_journal_analysis(tmp_path, capsys):
+    from tempo_log.commands.analyze_cmd import run_analyze
+
+    journal = tmp_path / "multi_day.md"
+    journal.write_text(
+        """
+## 2026-09-20 09:00 UTC — PROJ-1: day 1 task
+Time estimate: 1h | Ticket: PROJ-1 [id:101]
+- Work day 1
+
+## 2026-09-21 09:00 UTC — PROJ-2: day 2 task
+Time estimate: 1h | Ticket: PROJ-2 [id:102]
+- Work day 2
+""",
+        encoding="utf-8",
+    )
+    # Analyze with --all-dates
+    args = build_parser().parse_args(["analyze", str(journal), "--all-dates", "--offline"])
+    rc = run_analyze(args, None)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Journal analysis for 2026-09-20" in out
+    assert "Journal analysis for 2026-09-21" in out
+
+    # Analyze with date range 2026-09-20..2026-09-21
+    args_range = build_parser().parse_args(["analyze", str(journal), "-d", "2026-09-20..2026-09-21", "--offline"])
+    rc_range = run_analyze(args_range, None)
+    assert rc_range == 0
+    out_range = capsys.readouterr().out
+    assert "Journal analysis for 2026-09-20" in out_range
+    assert "Journal analysis for 2026-09-21" in out_range

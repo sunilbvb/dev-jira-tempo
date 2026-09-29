@@ -13,6 +13,8 @@ from typing import Any
 from ..config import Settings
 from ..issue_cache import IssueCache
 from ..journal_analyzer import (
+    AnalysisReport,
+    PlannedEntry,
     _fmt_minutes,
     analyze_day,
     format_report,
@@ -45,7 +47,6 @@ def run_analyze(args: argparse.Namespace, target: Settings | TempoService | None
         logger.error("Journal file not found: %s", args.file)
         return 1
 
-    day = args.date or date_cls.today().isoformat()
     service = TempoService.from_settings(target) if isinstance(target, Settings) else target
     settings = service.settings if service is not None else None
 
@@ -99,76 +100,110 @@ def run_analyze(args: argparse.Namespace, target: Settings | TempoService | None
     )
     consolidate = getattr(args, "consolidate", None)
     allow_overlap = bool(getattr(args, "allow_overlap", False))
-
-    existing: list[dict[str, Any]] = []
-    if service is not None and not args.offline:
-        try:
-            acc = service.default_account_id
-            if not acc and service.jira_client:
-                acc = service.jira_client.get_current_account_id()
-            if acc:
-                res = service.list_time(account_id=acc, from_date=day, to_date=day, limit=1000)
-                existing = res if isinstance(res, list) else res.get("results", res.get("worklogs", []))
-        except Exception as exc:  # noqa: BLE001 - analysis still useful without it
-            logger.warning("Could not fetch existing Tempo worklogs: %s", exc)
+    trim = bool(getattr(args, "trim", False))
 
     entries = parse_journal(
         path.read_text(encoding="utf-8"),
         heading_time_mode=heading_time,
         meeting_prefix=meeting_prefix,
     )
-    report = analyze_day(
-        entries,
-        day,
-        round_minutes=round_mins,
-        daily_cap_hours=cap,
-        resolver=_make_resolver(service, args.offline),
-        can_lookup=bool(service is not None and service.jira_client is not None and not args.offline),
-        existing_worklogs=existing,
-        sequential=args.sequential,
-        reserved=[tuple(r.split("-", 1)) for r in (args.reserve or [])],
-        consolidate=consolidate,
-        heading_time=heading_time,
-        meeting_issue=meeting_issue,
-        fixed_blocks=fixed_blocks,
-        with_fixed_blocks=with_fixed_blocks,
-        duplicate_window_minutes=duplicate_window,
-        allow_overlap=allow_overlap,
-        drop_patterns=drop_patterns,
-        max_bullets=max_bullets,
-    )
+
+    # Determine dates to analyze
+    if getattr(args, "all_dates", False):
+        dates_to_analyze = sorted(set(e.date for e in entries if e.date))
+    elif args.date and ".." in args.date:
+        start_d, end_d = args.date.split("..", 1)
+        start_d, end_d = start_d.strip(), end_d.strip()
+        dates_to_analyze = sorted(set(e.date for e in entries if e.date and start_d <= e.date <= end_d))
+    else:
+        dates_to_analyze = [args.date or date_cls.today().isoformat()]
+
+    if not dates_to_analyze:
+        logger.error("No dates found to analyze.")
+        return 1
+
+    reports: list[AnalysisReport] = []
+    has_errors = False
+
+    for day in dates_to_analyze:
+        existing: list[dict[str, Any]] = []
+        if service is not None and not args.offline:
+            try:
+                acc = service.default_account_id
+                if not acc and service.jira_client:
+                    acc = service.jira_client.get_current_account_id()
+                if acc:
+                    res = service.list_time(account_id=acc, from_date=day, to_date=day, limit=1000)
+                    existing = res if isinstance(res, list) else res.get("results", res.get("worklogs", []))
+            except Exception as exc:  # noqa: BLE001 - analysis still useful without it
+                logger.warning("Could not fetch existing Tempo worklogs for %s: %s", day, exc)
+
+        rep = analyze_day(
+            entries,
+            day,
+            round_minutes=round_mins,
+            daily_cap_hours=cap,
+            resolver=_make_resolver(service, args.offline),
+            can_lookup=bool(service is not None and service.jira_client is not None and not args.offline),
+            existing_worklogs=existing,
+            sequential=args.sequential,
+            reserved=[tuple(r.split("-", 1)) for r in (args.reserve or [])],
+            consolidate=consolidate,
+            heading_time=heading_time,
+            meeting_issue=meeting_issue,
+            fixed_blocks=fixed_blocks,
+            with_fixed_blocks=with_fixed_blocks,
+            duplicate_window_minutes=duplicate_window,
+            allow_overlap=allow_overlap,
+            drop_patterns=drop_patterns,
+            max_bullets=max_bullets,
+            trim=trim,
+        )
+        reports.append(rep)
+        if rep.blocked or rep.day_warnings:
+            has_errors = True
 
     if args.json:
-        payload = {
-            "date": report.date,
-            "total_minutes": report.total_minutes,
-            "existing_minutes": report.existing_minutes,
-            "cap_hours": report.cap_hours,
-            "entries": [
-                {
-                    **asdict(p.entry),
-                    "status": p.status,
-                    "rounded_minutes": p.rounded_minutes,
-                    "planned_start": p.start,
-                    "problems": p.problems,
-                    "notes": p.notes,
-                    "is_logged": p.is_logged,
-                }
-                for p in report.planned
-            ],
-            "day_warnings": report.day_warnings,
-            "day_info": report.day_info,
-            "next_steps": report.next_steps,
-        }
-        print(json.dumps(payload, indent=2))
+        payloads = [
+            {
+                "date": rep.date,
+                "total_minutes": rep.total_minutes,
+                "ready_minutes": rep.ready_minutes,
+                "existing_minutes": rep.existing_minutes,
+                "cap_hours": rep.cap_hours,
+                "entries": [
+                    {
+                        **asdict(p.entry),
+                        "status": p.status,
+                        "rounded_minutes": p.rounded_minutes,
+                        "planned_start": p.start,
+                        "problems": p.problems,
+                        "notes": p.notes,
+                        "is_logged": p.is_logged,
+                    }
+                    for p in rep.planned
+                ],
+                "day_warnings": rep.day_warnings,
+                "day_info": rep.day_info,
+                "next_steps": rep.next_steps,
+            }
+            for rep in reports
+        ]
+        print(json.dumps(payloads if len(payloads) > 1 else payloads[0], indent=2))
     else:
-        print(format_report(report))
+        for rep in reports:
+            print(format_report(rep))
+            if len(reports) > 1:
+                print("\n" + "=" * 80 + "\n")
+
+    all_ready: list[PlannedEntry] = [p for rep in reports for p in rep.ready]
+    all_blocked: list[PlannedEntry] = [p for rep in reports for p in rep.blocked if not p.is_logged]
 
     if args.export:
-        ready = [p.to_batch() for p in report.ready]
-        Path(args.export).write_text(json.dumps(ready, indent=2), encoding="utf-8")
+        ready_payload = [p.to_batch() for p in all_ready]
+        Path(args.export).write_text(json.dumps(ready_payload, indent=2), encoding="utf-8")
         print(
-            f"\nExported {len(ready)} READY entr{'y' if len(ready) == 1 else 'ies'} to {args.export} "
+            f"\nExported {len(ready_payload)} READY entr{'y' if len(ready_payload) == 1 else 'ies'} to {args.export} "
             f"(blocked entries left out). Upload with: tempo-log batch {args.export} --dry-run"
         )
 
@@ -177,34 +212,34 @@ def run_analyze(args: argparse.Namespace, target: Settings | TempoService | None
             logger.error("--submit requires online access and Tempo credentials.")
             return 1
 
-        active_blocked = [p for p in report.blocked if not p.is_logged]
-        if active_blocked:
+        if all_blocked:
             logger.error(
                 "Cannot submit: %d entry/entries are BLOCKED. Fix them or remove them before submitting.",
-                len(active_blocked),
+                len(all_blocked),
             )
             return 1
 
-        to_upload = report.ready
-        if not to_upload:
+        if not all_ready:
             print("\nNothing to upload. All entries are already logged or skipped.")
             return 0
 
+        total_mins = sum(p.rounded_minutes or 0 for p in all_ready)
+        day_count_str = f" across {len(reports)} days" if len(reports) > 1 else ""
         print(
-            f"\nPlan: {len(to_upload)} entr{'y' if len(to_upload) == 1 else 'ies'} "
-            f"({_fmt_minutes(sum(p.rounded_minutes or 0 for p in to_upload))}) ready to upload."
+            f"\nPlan: {len(all_ready)} entr{'y' if len(all_ready) == 1 else 'ies'} "
+            f"({_fmt_minutes(total_mins)}){day_count_str} ready to upload."
         )
 
         if not getattr(args, "yes", False):
             try:
-                confirm = input(f"Upload {len(to_upload)} entries to Tempo? [y/N]: ").strip().lower()
+                confirm = input(f"Upload {len(all_ready)} entries to Tempo? [y/N]: ").strip().lower()
             except (EOFError, KeyboardInterrupt):
                 confirm = "n"
             if confirm not in ("y", "yes"):
                 print("Submission cancelled.")
                 return 0
 
-        batch_payload = [p.to_batch() for p in to_upload]
+        batch_payload = [p.to_batch() for p in all_ready]
         succeeded, failed, failures = service.batch_log(
             batch_payload,
             stop_on_error=True,
@@ -222,4 +257,4 @@ def run_analyze(args: argparse.Namespace, target: Settings | TempoService | None
 
         print(f"\nSuccessfully uploaded {succeeded} worklog(s) to Tempo.")
 
-    return 1 if (args.strict and (report.blocked or report.day_warnings)) else 0
+    return 1 if (args.strict and has_errors) else 0

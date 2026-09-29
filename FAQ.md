@@ -22,6 +22,9 @@ Comprehensive answers to common questions about configuration, credentials, sess
   - [12. What if my journal timestamps record when work ended?](#12-what-if-my-journal-timestamps-record-when-work-ended)
   - [13. How do fixed blocks (like lunch) work?](#13-how-do-fixed-blocks-like-lunch-work)
   - [14. Can I map keywords to tickets automatically?](#14-can-i-map-keywords-to-tickets-automatically)
+  - [15. What happens if planned journal hours exceed my daily cap?](#15-what-happens-if-planned-journal-hours-exceed-my-daily-cap)
+  - [16. Can I analyze multiple days or a date range at once?](#16-can-i-analyze-multiple-days-or-a-date-range-at-once)
+  - [17. Can I analyze and submit journals programmatically over HTTP?](#17-can-i-analyze-and-submit-journals-programmatically-over-http)
 
 ---
 
@@ -103,3 +106,22 @@ Yes. You can define keyword-to-ticket mappings in `.tempo-log/ticket-map.toml` o
 "standup" = "MEET-100"
 ```
 When an untagged journal entry matches a keyword, the suggestion hook automatically attaches the mapped ticket.
+
+### 15. What happens if planned journal hours exceed my daily cap?
+By default, the analyzer warns you that total hours exceed `TEMPO_DAILY_CAP_HOURS`.
+Passing `--trim` automatically reduces the excess duration down to the cap:
+- It prioritizes flexible non-meeting tasks, trimming shortest entries first.
+- Fixed blocks and meetings are never trimmed.
+- Start times are adjusted sequentially, and original vs trimmed durations are recorded in the entry notes.
+
+### 16. Can I analyze multiple days or a date range at once?
+Yes:
+- `--all-dates`: Scans the journal and processes every date section found.
+- `-d YYYY-MM-DD..YYYY-MM-DD`: Processes only dates within the specified inclusive range.
+Both modes output a summary per day and support batch submission across the entire range with `--submit`.
+
+### 17. Can I analyze and submit journals programmatically over HTTP?
+Yes. The embedded web server exposes two dedicated JSON REST endpoints:
+- `POST /api/analyze`: Takes journal markdown in `content` or a server `file` path, parses and plans timesheets with full validation (rounding, duplicate skipping, cap trimming), and returns the plan.
+- `POST /api/analyze/submit`: Receives ready entries and batch logs them directly to Tempo with atomic rollback on failure.
+

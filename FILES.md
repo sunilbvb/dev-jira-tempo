@@ -55,12 +55,12 @@
 | File | Relative Path | What it owns |
 |---|---|---|
 | `__init__.py` | `src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `SQLiteJournal`, `DualJournal`, `TimerState`, `start_timer`, `stop_timer`, `run_server`, and exceptions) |
-| `web_server.py` | `src/tempo_log/web_server.py` | **Embedded REST API & static web server** — zero-dependency HTTP server delivering JSON endpoints and serving the frontend dashboard |
+| `web_server.py` | `src/tempo_log/web_server.py` | **Embedded REST API & static web server** — zero-dependency HTTP server delivering JSON endpoints (`/api/timer`, `/api/analyze`, `/api/analyze/submit`, etc.) and serving the frontend dashboard |
 | `service.py` | `src/tempo_log/service.py` | **Core service facade (`TempoService`)** — central orchestrator for Jira key resolution, Tempo worklog creation, updates, listings, batch executions, dual journaling, and health checks |
 | `cli.py` | `src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `analyze`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`), routing, and terminal formatting |
-| `journal_analyzer.py` | `src/tempo_log/journal_analyzer.py` | **Free-form session journal analyzer** — parses Markdown journals, consolidates micro-sessions, rounds durations, handles meetings, cleans descriptions, validates overlaps, and detects existing worklogs |
+| `journal_analyzer.py` | `src/tempo_log/journal_analyzer.py` | **Free-form session journal analyzer** — parses Markdown journals, consolidates micro-sessions, rounds durations, handles meetings, cleans descriptions, validates overlaps, auto-trims to daily cap, and detects existing worklogs |
 | `plugins.py` | `src/tempo_log/plugins.py` | **Plugin architecture & Ticket Mapper** — plugin hooks for ticket suggestions and meeting gap-checks, plus local `.tempo-log/ticket-map.toml` parser |
-| `commands/analyze_cmd.py` | `src/tempo_log/commands/analyze_cmd.py` | **CLI handler for `analyze`** — runs journal report, formats plan, coordinates `--submit` with atomic rollback |
+| `commands/analyze_cmd.py` | `src/tempo_log/commands/analyze_cmd.py` | **CLI handler for `analyze`** — runs single or multi-day journal reports, formats plan, coordinates `--submit`, date ranges, and `--trim` with atomic rollback |
 | `timer.py` | `src/tempo_log/timer.py` | **Live stopwatch timer** — local state tracking in `active_timer.json`, elapsed hours calculation, start/stop/status helpers |
 | `tui.py` | `src/tempo_log/tui.py` | **Interactive TUI Dashboard** — Rich & ANSI weekly summary, live timer visualization, and interactive keyboard command loop |
 | `keyring_store.py` | `src/tempo_log/keyring_store.py` | **OS Keyring Secret Storage** — Keychain / Secret Service / Windows Vault integration for secure credential storage without plaintext files |

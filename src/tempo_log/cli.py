@@ -244,6 +244,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--meeting-issue",
         help="Fallback Jira ticket key for meeting entries without explicit ticket.",
     )
+    analyze_parser.add_argument(
+        "--trim",
+        action="store_true",
+        help="Automatically trim excess duration from shortest non-meeting entries down to daily cap.",
+    )
+    analyze_parser.add_argument(
+        "--all-dates",
+        action="store_true",
+        help="Analyze all dates present in the journal file instead of just one date.",
+    )
 
     # 6. doctor
     subparsers.add_parser(

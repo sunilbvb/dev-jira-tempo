@@ -449,3 +449,7 @@ tempo-log analyze journal.md --date today --submit --yes
 8. **Post-rounding overlap validation**: Ensures rounded time blocks do not overlap each other, fixed blocks, or pass midnight. Use `--allow-overlap` to allow submission with warnings.
 9. **Ticket suggestions & Mapping**: Keyword-to-ticket mapper via `.tempo-log/ticket-map.toml` or `~/.tempo-log/ticket-map.toml`, plus pluggable hooks for tracker searches.
 10. **Meeting gap-check**: Pluggable hooks for checking calendar invites and email recaps against journal entries.
+11. **Smart Cap Trimming (`--trim`)**: When total planned hours exceed `TEMPO_DAILY_CAP_HOURS`, automatically reduces excess duration starting from the shortest non-meeting tasks down to the cap, adjusts start times, and records original vs trimmed hours in the worklog description.
+12. **Multi-Day & Date-Range Analysis (`--all-dates`, `-d YYYY-MM-DD..YYYY-MM-DD`)**: Process journals across multiple days or a date range in one command, with unified reports and batch submission.
+13. **REST Web API (`POST /api/analyze` & `POST /api/analyze/submit`)**: Remotely parse, plan, and submit markdown worklogs via the embedded web console backend.
+

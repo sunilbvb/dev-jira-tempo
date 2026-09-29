@@ -288,7 +288,20 @@ tempo-log analyze journal.md --date today --submit --yes
 
 # Consolidate multiple micro-entries on the same ticket across the day
 tempo-log analyze journal.md --date today --consolidate day --submit
+
+# Smart auto-trim when planned work exceeds daily cap (trims shortest non-meeting tasks first)
+tempo-log analyze journal.md --date today --trim --submit
+
+# Multi-day and date-range processing in a single pass
+tempo-log analyze journal.md --all-dates --plan
+tempo-log analyze journal.md -d 2026-03-01..2026-03-05 --submit --yes
 ```
+
+#### Journal Analysis REST API
+Analyze and submit journals over HTTP:
+- `POST /api/analyze` — analyzes journal markdown content or file path, returning parsed entries, totals, and validation status.
+- `POST /api/analyze/submit` — batch logs planned entries with atomic rollback on failure.
+
 
 ---
 

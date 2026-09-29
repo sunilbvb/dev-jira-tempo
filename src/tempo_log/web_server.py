@@ -9,6 +9,8 @@ import mimetypes
 import os
 import secrets
 import urllib.parse
+import datetime
+from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,6 +19,7 @@ from typing import Any
 from .config import JiraConfig, Settings, load_settings
 from .exceptions import TempoLogError, ValidationError
 from .journal import DEFAULT_SQLITE_PATH, SQLiteJournal
+from .journal_analyzer import analyze_day, parse_fixed_blocks, parse_journal
 from .keyring_store import (
     get_credential,
     is_keyring_available,
@@ -144,6 +147,12 @@ class TempoWebHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/worklog":
             self._handle_post_worklog(body)
+            return
+        if path == "/api/analyze":
+            self._handle_api_analyze(body)
+            return
+        if path == "/api/analyze/submit":
+            self._handle_api_analyze_submit(body)
             return
 
         self._send_error("Endpoint not found", HTTPStatus.NOT_FOUND)
@@ -375,6 +384,117 @@ class TempoWebHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def _handle_api_analyze(self, body: dict[str, Any]) -> None:
+        content = body.get("content", "")
+        file_path = body.get("file")
+        if not content and file_path:
+            p = Path(file_path).expanduser()
+            if p.is_file():
+                content = p.read_text(encoding="utf-8")
+        if not content:
+            self._send_error("Provide 'content' or 'file' containing journal markdown.", HTTPStatus.BAD_REQUEST)
+            return
+
+        date_val = body.get("date") or datetime.date.today().isoformat()
+        service = self._get_service()
+        settings = service.settings if service else None
+
+        round_mins = body.get("round_minutes") or (settings.tempo_round_minutes if settings else 15)
+        cap = body.get("cap") or (settings.tempo_daily_cap_hours if settings else None)
+        consolidate = body.get("consolidate")
+        trim = bool(body.get("trim", False))
+        sequential = bool(body.get("sequential", False))
+
+        existing: list[dict[str, Any]] = []
+        if service and not body.get("offline", False):
+            try:
+                acc = service.default_account_id
+                if not acc and service.jira_client:
+                    acc = service.jira_client.get_current_account_id()
+                if acc:
+                    res = service.list_time(account_id=acc, from_date=date_val, to_date=date_val, limit=1000)
+                    existing = res if isinstance(res, list) else res.get("results", res.get("worklogs", []))
+            except Exception as exc:
+                logger.warning("Could not list worklogs in web analyze: %s", exc)
+
+        entries = parse_journal(
+            content,
+            heading_time_mode=settings.tempo_heading_time if settings else "start",
+            meeting_prefix=settings.tempo_meeting_prefix if settings else "Meeting:",
+        )
+        report = analyze_day(
+            entries,
+            date_val,
+            round_minutes=round_mins,
+            daily_cap_hours=cap,
+            resolver=(lambda k: service.jira_client.resolve_issue_id(k)) if (service and service.jira_client) else None,
+            existing_worklogs=existing,
+            sequential=sequential,
+            consolidate=consolidate,
+            trim=trim,
+            meeting_issue=settings.tempo_meeting_issue if settings else None,
+            fixed_blocks=parse_fixed_blocks(settings.tempo_fixed_blocks if settings else None),
+            duplicate_window_minutes=settings.tempo_duplicate_window_minutes if settings else 15,
+        )
+
+        self._send_json({
+            "status": "ok",
+            "date": report.date,
+            "total_minutes": report.total_minutes,
+            "ready_minutes": report.ready_minutes,
+            "existing_minutes": report.existing_minutes,
+            "cap_hours": report.cap_hours,
+            "ready_count": len(report.ready),
+            "blocked_count": len(report.blocked),
+            "logged_count": len(report.logged),
+            "entries": [
+                {
+                    **asdict(p.entry),
+                    "status": p.status,
+                    "rounded_minutes": p.rounded_minutes,
+                    "planned_start": p.start,
+                    "problems": p.problems,
+                    "notes": p.notes,
+                    "is_logged": p.is_logged,
+                }
+                for p in report.planned
+            ],
+            "day_warnings": report.day_warnings,
+            "day_info": report.day_info,
+            "next_steps": report.next_steps,
+        })
+
+    def _handle_api_analyze_submit(self, body: dict[str, Any]) -> None:
+        service = self._get_service()
+        if not service:
+            self._send_error("Cannot submit: Tempo API token not configured.", HTTPStatus.UNAUTHORIZED)
+            return
+
+        entries = body.get("entries", [])
+        if not entries:
+            self._send_error("No entries provided to submit.", HTTPStatus.BAD_REQUEST)
+            return
+
+        succeeded, failed, failures = service.batch_log(
+            entries,
+            stop_on_error=True,
+            rollback_on_error=True,
+            allow_duplicates=True,
+        )
+        if failed > 0:
+            self._send_error(
+                f"Submission failed ({failed} failed, rolled back): {'; '.join(failures)}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return
+
+        self._send_json({
+            "status": "ok",
+            "succeeded": succeeded,
+            "failed": 0,
+            "message": f"Successfully uploaded {succeeded} worklog(s) to Tempo.",
+        })
 
     def _serve_static(self, path: str) -> None:
         static_dir = get_static_dir()
