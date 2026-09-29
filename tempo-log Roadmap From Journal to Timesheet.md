@@ -27,17 +27,17 @@ Two days of real journal-to-timesheet runs surfaced 12 recurring problems; each 
 | # | Problem observed | Effect | Fixed yet? |
 | --- | --- | --- | --- |
 | 1 | Journal formats drift: `### KEY [id:N]` sub-headings, headings without a date, `Time:` ranges vs `Time estimate:` | Entries silently dropped or time attached to the wrong entry | Yes (parser) |
-| 2 | Per-entry 15-min round-up inflates many small entries (2m, 5m) far past the real window | 1h52m of work became 3h30m | Partly (rounding shown; no merge) |
-| 3 | Same ticket split across many tiny entries | 7 entries for one ticket, 1h45m logged for 30m of work | No |
-| 4 | Journal timestamps are written when work ends, not when it starts | False "estimate may be inflated" warnings, wrong start times | No |
-| 5 | Rounded entries overlap each other and fixed slots | Double-booked hours on the timesheet | Yes (`--sequential`, `--reserve`) |
+| 2 | Per-entry 15-min round-up inflates many small entries (2m, 5m) far past the real window | 1h52m of work became 3h30m | Yes (F3 consolidation before rounding) |
+| 3 | Same ticket split across many tiny entries | 7 entries for one ticket, 1h45m logged for 30m of work | Yes (F3 `--consolidate` contiguous & day) |
+| 4 | Journal timestamps are written when work ends, not when it starts | False "estimate may be inflated" warnings, wrong start times | Yes (F7 `TEMPO_HEADING_TIME=end`) |
+| 5 | Rounded entries overlap each other and fixed slots | Double-booked hours on the timesheet | Yes (F8 post-rounding checks, `--sequential`, `--reserve`) |
 | 6 | Start times not on quarter hours (14:28, 14:58) | Messy timesheet | Yes (snapping) |
-| 7 | Entries already logged by the person or another session | A duplicate worklog was created | No |
-| 8 | Recurring fixed blocks (lunch) and meetings not in the journal | Missing entries; overlaps found late | No |
-| 9 | Meetings recorded as calendar invites or recap emails, not journal entries | A meeting was missed; an unattended one was nearly logged | No |
-| 10 | Descriptions copied raw: file paths, tool names, internal notes, assistant narration | Every description rewritten by hand | No |
-| 11 | Work with no ticket, or a ticket that already exists under another name | Manual Jira searches; a duplicate ticket nearly created | No |
-| 12 | Journal keeps growing during the day | Hard to tell what is new since the last upload | No |
+| 7 | Entries already logged by the person or another session | A duplicate worklog was created | Yes (F2 `LOGGED (#id)` duplicate matching) |
+| 8 | Recurring fixed blocks (lunch) and meetings not in the journal | Missing entries; overlaps found late | Yes (F4 `TEMPO_FIXED_BLOCKS`, F5 meetings) |
+| 9 | Meetings recorded as calendar invites or recap emails, not journal entries | A meeting was missed; an unattended one was nearly logged | Yes (F5 first-class meetings, `Attended: no`, F10 plugin) |
+| 10 | Descriptions copied raw: file paths, tool names, internal notes, assistant narration | Every description rewritten by hand | Yes (F6 timesheet-ready descriptions, clean title & bullets) |
+| 11 | Work with no ticket, or a ticket that already exists under another name | Manual Jira searches; a duplicate ticket nearly created | Yes (F9 `ticket-map.toml` & candidate hooks) |
+| 12 | Journal keeps growing during the day | Hard to tell what is new since the last upload | Yes (F1 `--submit` uploads only new READY entries) |
 
 ## Proposed features
 

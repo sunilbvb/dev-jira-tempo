@@ -400,34 +400,52 @@ def handle_slack_time_command(user_slack_id, issue_key, hours, notes):
 
 ## Analyze a free-form session journal (`analyze`)
 
-`analyze` is a read-only pre-flight check for journals that don't use the strict
-`Tempo: KEY | HH:MM-HH:MM` format. It understands:
+`analyze` parses free-form session journals and turns them into clean, reviewable timesheets:
 
 ```markdown
-## 2026-09-24 09:00 UTC — PROJ-1: add login banner
+## 2026-09-24 09:00 UTC — PROJ-1: add login banner — fixed
 Time estimate: 30m | Ticket: PROJ-1 [id:1001]
 - Added banner component
+- Files: src/components/Banner.vue
 
 ## 2026-09-24 09:30 UTC — Batch fixing QA doc
 Time estimate: (logged per-ticket below)
 ### PROJ-2 — fixed (15m)
 ### PROJ-3 — fixed (1h, medium)
 
-## 2026-09-24 10:30 UTC — Onboarding fixes
-Time: 10:30–12:00 UTC (1h30m) | Ticket: none
+## 2026-09-24 10:30 UTC — Meeting: Team Standup
+Time: 10:30–11:00 UTC (30m)
+- Discussed sprint goals
+
+## 2026-09-24 11:00 UTC — Meeting: Optional Sync
+Time: 11:00–11:30 UTC (30m)
+Attended: no
 ```
+
+### Daily Workflow
 
 ```bash
-tempo-log analyze journal.md --date 2026-09-24            # report only
-tempo-log analyze journal.md -d 2026-09-24 --offline      # no Jira/Tempo calls
-tempo-log analyze journal.md -d 2026-09-24 --export ready.json
-tempo-log batch ready.json --dry-run                      # then upload for real
+# 1. Preview plan: checks tickets, rounding, meetings, skips already logged
+tempo-log analyze journal.md --date today --plan
+
+# 2. Upload READY entries directly to Tempo (confirms before upload, rolls back on error)
+tempo-log analyze journal.md --date today --submit
+
+# 3. Non-interactive upload for scripts
+tempo-log analyze journal.md --date today --submit --yes
 ```
 
-For each entry it shows READY / BLOCKED with the reason (missing ticket, missing
-numeric issue id, missing duration) and notes (rounding, repeated ticket,
-"already fixed" status, no bullet points). For the day it checks the total
-against `TEMPO_DAILY_CAP_HOURS`, estimates that are longer than the gap to the
-next entry, overlapping time ranges, and worklogs already in Tempo. It ends with
-concrete next steps. Nothing is sent to Tempo. `--strict` exits 1 if anything
-is blocked or warned, and `--json` prints the report as JSON.
+### Key Features
+
+1. **Submit from analyze (`--submit`)**: Re-checks Tempo worklogs, skips already-logged entries, prints the upload plan, asks for confirmation, and rolls back all created worklogs if any entry fails.
+2. **Skip already logged (`LOGGED (#id)`)**: Matches entries against Tempo by issue and overlapping time (or start within `TEMPO_DUPLICATE_WINDOW_MINUTES`). Entries already in Tempo are marked `LOGGED` and excluded from submission.
+3. **Consolidate same-ticket entries (`--consolidate`)**:
+   - `--consolidate` (or `--consolidate contiguous`): Merges consecutive entries on the same ticket into one, summing durations before rounding and de-duplicating bullet points.
+   - `--consolidate day`: Merges all entries on the same ticket across the entire day.
+4. **Fixed daily blocks (`TEMPO_FIXED_BLOCKS`)**: Configurable recurring blocks (e.g. `TEMPO_FIXED_BLOCKS="13:00-14:00@LUNCH-1:Lunch"`). Reserved during `--sequential` layout and optionally logged with `--with-fixed-blocks`.
+5. **Meetings as first-class entries**: Sessions or sub-entries with `Meeting:` prefix default to `TEMPO_MEETING_ISSUE` (or `--meeting-issue`), keep actual start times, and act as reserved slots during `--sequential` layout. Entries marked `Attended: no` are automatically skipped.
+6. **Timesheet-ready descriptions**: Automatically cleans title (removes ticket prefix and generic status words like "fixed"), drops noise lines (`Files:`, file paths, tool runs, `Internal notes:`), and limits bullets to 4 single-sentence points (up to 160 characters).
+7. **Heading-time mode (`--heading-time start|end`)**: Set `TEMPO_HEADING_TIME=end` (or `--heading-time end`) for journals where heading timestamps record when work ended. Calculates start times backwards and eliminates false "inflated estimate" warnings.
+8. **Post-rounding overlap validation**: Ensures rounded time blocks do not overlap each other, fixed blocks, or pass midnight. Use `--allow-overlap` to allow submission with warnings.
+9. **Ticket suggestions & Mapping**: Keyword-to-ticket mapper via `.tempo-log/ticket-map.toml` or `~/.tempo-log/ticket-map.toml`, plus pluggable hooks for tracker searches.
+10. **Meeting gap-check**: Pluggable hooks for checking calendar invites and email recaps against journal entries.

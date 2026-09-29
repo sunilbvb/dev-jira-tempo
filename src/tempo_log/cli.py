@@ -215,6 +215,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep a slot free when laying out (e.g. a meeting). Repeatable.",
     )
     analyze_parser.add_argument("--strict", action="store_true", help="Exit 1 if anything is blocked or warned.")
+    analyze_parser.add_argument("--plan", action="store_true", help="Preview plan without submitting (default behavior).")
+    analyze_parser.add_argument("--submit", action="store_true", help="Upload READY entries to Tempo after duplicate and safety checks.")
+    analyze_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt before submitting.")
+    analyze_parser.add_argument(
+        "--consolidate",
+        nargs="?",
+        const="contiguous",
+        choices=["contiguous", "day"],
+        help="Merge entries on the same issue ('contiguous' or 'day').",
+    )
+    analyze_parser.add_argument(
+        "--heading-time",
+        choices=["start", "end"],
+        help="Interpret heading timestamp as start or end time (default: TEMPO_HEADING_TIME or start).",
+    )
+    analyze_parser.add_argument(
+        "--with-fixed-blocks",
+        action="store_true",
+        help="Include configured TEMPO_FIXED_BLOCKS as loggable entries.",
+    )
+    analyze_parser.add_argument(
+        "--allow-overlap",
+        action="store_true",
+        help="Allow time overlaps without blocking submission.",
+    )
+    analyze_parser.add_argument(
+        "--meeting-issue",
+        help="Fallback Jira ticket key for meeting entries without explicit ticket.",
+    )
 
     # 6. doctor
     subparsers.add_parser(
@@ -589,6 +618,9 @@ def run(args: argparse.Namespace) -> int:
     try:
         settings = load_settings()
     except ConfigError as exc:
+        if args.command == "analyze" and not getattr(args, "submit", False):
+            logger.warning("Tempo credentials not set; running analyze in offline mode.")
+            return run_analyze(args, None)
         logger.error(str(exc))
         return 1
 

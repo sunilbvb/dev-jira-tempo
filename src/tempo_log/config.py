@@ -27,6 +27,12 @@ class Settings:
     tempo_round_minutes: int | None = None
     tempo_default_issue: str | None = None
     tempo_meeting_issue: str | None = None
+    tempo_duplicate_window_minutes: int = 15
+    tempo_fixed_blocks: str | None = None
+    tempo_meeting_prefix: str = "Meeting:"
+    tempo_description_drop_patterns: list[str] | None = None
+    tempo_description_max_bullets: int = 4
+    tempo_heading_time: str = "start"
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -100,6 +106,20 @@ def load_settings() -> Settings:
     default_issue = os.environ.get("TEMPO_DEFAULT_ISSUE") or get_credential("TEMPO_DEFAULT_ISSUE")
     meeting_issue = os.environ.get("TEMPO_MEETING_ISSUE") or get_credential("TEMPO_MEETING_ISSUE")
 
+    dup_win_str = os.environ.get("TEMPO_DUPLICATE_WINDOW_MINUTES") or get_credential("TEMPO_DUPLICATE_WINDOW_MINUTES")
+    dup_win = int(dup_win_str) if dup_win_str else 15
+
+    fixed_blocks = os.environ.get("TEMPO_FIXED_BLOCKS") or get_credential("TEMPO_FIXED_BLOCKS")
+    meeting_prefix = os.environ.get("TEMPO_MEETING_PREFIX") or get_credential("TEMPO_MEETING_PREFIX") or "Meeting:"
+
+    drop_patterns_str = os.environ.get("TEMPO_DESCRIPTION_DROP_PATTERNS") or get_credential("TEMPO_DESCRIPTION_DROP_PATTERNS")
+    drop_patterns = [p.strip() for p in drop_patterns_str.split(";") if p.strip()] if drop_patterns_str else None
+
+    max_bullets_str = os.environ.get("TEMPO_DESCRIPTION_MAX_BULLETS") or get_credential("TEMPO_DESCRIPTION_MAX_BULLETS")
+    max_bullets = int(max_bullets_str) if max_bullets_str else 4
+
+    heading_time = os.environ.get("TEMPO_HEADING_TIME") or get_credential("TEMPO_HEADING_TIME") or "start"
+
     return Settings(
         tempo_api_token=tempo_token,
         tempo_base_url=tempo_base_url,
@@ -109,4 +129,10 @@ def load_settings() -> Settings:
         tempo_round_minutes=round_mins,
         tempo_default_issue=default_issue,
         tempo_meeting_issue=meeting_issue,
+        tempo_duplicate_window_minutes=dup_win,
+        tempo_fixed_blocks=fixed_blocks,
+        tempo_meeting_prefix=meeting_prefix,
+        tempo_description_drop_patterns=drop_patterns,
+        tempo_description_max_bullets=max_bullets,
+        tempo_heading_time=heading_time,
     )
