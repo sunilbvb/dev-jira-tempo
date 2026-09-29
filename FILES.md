@@ -26,15 +26,17 @@
 | File | Relative Path | What it owns |
 |---|---|---|
 | `README.md` | `README.md` | **Main project documentation** — overview, quick start, configuration table, CLI usage guide, Python SDK snippet, FAQ, and test instructions |
+| `FAQ.md` | `FAQ.md` | **Frequently Asked Questions** — comprehensive answers on auth, journal analysis, duplicate skipping, meetings, and descriptions |
 | `CONTRIBUTING.md` | `CONTRIBUTING.md` | **Open-source contributor handbook** — development setup, architecture diagram, open-source roadmap wishlist matrix, PR guidelines, and code standards |
 | `FILES.md` | `FILES.md` | **This file** — complete repository file map with relative paths, line references, and module ownership |
 | `USAGE.md` | `USAGE.md` | **Comprehensive how-to guide** — daily routine, timer mode, TUI dashboard, keyring auth, shell completion, git hook, worklog import, and troubleshooting |
+| `tempo-log Roadmap From Journal to Timesheet.md` | `tempo-log Roadmap From Journal to Timesheet.md` | **Roadmap specification** — 12 observed journal problems, 10 proposed features (F1–F10), and implementation status |
 | `pyproject.toml` | `pyproject.toml` | **Build configuration & packaging** — package metadata, dependencies (`requests>=2.31`), console script entrypoint (`tempo-log`), optional dev/keyring/tui dependencies |
 | `requirements.txt` | `requirements.txt` | Pip fallback requirements file (`requests>=2.31`) |
 | `LICENSE` | `LICENSE` | MIT Open-Source License |
 | `start.sh` | `start.sh` | **Console startup script** — loads configuration and starts Tempo Web Console on port 18114 |
 | `.gitignore` | `.gitignore` | Excludes `.env`, `.venv`, `.idea/`, `graphify-out/`, `*.egg-info/`, `.pytest_cache/`, `dist/`, `build/` |
-| `.env.example` | `.env.example` | Environment variable template (`TEMPO_API_TOKEN`, `TEMPO_BASE_URL`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_ACCOUNT_ID`, `JIRA_SERVER`, `TEMPO_DAILY_CAP_HOURS`, `TEMPO_ROUND_MINUTES`, `TEMPO_DEFAULT_ISSUE`, `TEMPO_MEETING_ISSUE`) |
+| `.env.example` | `.env.example` | Environment variable template (`TEMPO_API_TOKEN`, `TEMPO_BASE_URL`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_ACCOUNT_ID`, `JIRA_SERVER`, `TEMPO_DAILY_CAP_HOURS`, `TEMPO_ROUND_MINUTES`, `TEMPO_DEFAULT_ISSUE`, `TEMPO_MEETING_ISSUE`, `TEMPO_DUPLICATE_WINDOW_MINUTES`, `TEMPO_FIXED_BLOCKS`, `TEMPO_MEETING_PREFIX`, `TEMPO_DESCRIPTION_MAX_BULLETS`, `TEMPO_HEADING_TIME`) |
 
 ---
 
@@ -55,7 +57,10 @@
 | `__init__.py` | `src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `SQLiteJournal`, `DualJournal`, `TimerState`, `start_timer`, `stop_timer`, `run_server`, and exceptions) |
 | `web_server.py` | `src/tempo_log/web_server.py` | **Embedded REST API & static web server** — zero-dependency HTTP server delivering JSON endpoints and serving the frontend dashboard |
 | `service.py` | `src/tempo_log/service.py` | **Core service facade (`TempoService`)** — central orchestrator for Jira key resolution, Tempo worklog creation, updates, listings, batch executions, dual journaling, and health checks |
-| `cli.py` | `src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`), routing, and terminal formatting |
+| `cli.py` | `src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `analyze`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`), routing, and terminal formatting |
+| `journal_analyzer.py` | `src/tempo_log/journal_analyzer.py` | **Free-form session journal analyzer** — parses Markdown journals, consolidates micro-sessions, rounds durations, handles meetings, cleans descriptions, validates overlaps, and detects existing worklogs |
+| `plugins.py` | `src/tempo_log/plugins.py` | **Plugin architecture & Ticket Mapper** — plugin hooks for ticket suggestions and meeting gap-checks, plus local `.tempo-log/ticket-map.toml` parser |
+| `commands/analyze_cmd.py` | `src/tempo_log/commands/analyze_cmd.py` | **CLI handler for `analyze`** — runs journal report, formats plan, coordinates `--submit` with atomic rollback |
 | `timer.py` | `src/tempo_log/timer.py` | **Live stopwatch timer** — local state tracking in `active_timer.json`, elapsed hours calculation, start/stop/status helpers |
 | `tui.py` | `src/tempo_log/tui.py` | **Interactive TUI Dashboard** — Rich & ANSI weekly summary, live timer visualization, and interactive keyboard command loop |
 | `keyring_store.py` | `src/tempo_log/keyring_store.py` | **OS Keyring Secret Storage** — Keychain / Secret Service / Windows Vault integration for secure credential storage without plaintext files |
@@ -65,6 +70,7 @@
 | `jira_client.py` | `src/tempo_log/jira_client.py` | **Jira Cloud & Server/DC Client** — Cloud Basic auth & Server/DC Bearer PAT auth, issue key resolution with local cache, API v2/v3 fallback |
 | `issue_cache.py` | `src/tempo_log/issue_cache.py` | **Local Issue Key Cache** — persistent cache (`~/.tempo-log/issue_cache.json`) mapping Jira issue keys (`PROJ-123`) to numeric IDs |
 | `journal.py` | `src/tempo_log/journal.py` | **Pluggable worklog audit journal** — `BaseJournal`, `FileJournal` (JSONL), `SQLiteJournal` (relational query & CSV export), `DualJournal` |
+| `safety.py` | `src/tempo_log/safety.py` | **Submission safety checks** — duration rounding, duplicate worklog detection, daily cap enforcement, and overlap warnings |
 | `config.py` | `src/tempo_log/config.py` | **Configuration models & loader** — `Settings` and `JiraConfig` dataclasses, environment loader with OS keyring fallback |
 | `exceptions.py` | `src/tempo_log/exceptions.py` | **Unified exception hierarchy** — base `TempoLogError`, derived `ConfigError`, `TempoClientError`, `JiraClientError`, `ValidationError` |
 
@@ -74,9 +80,12 @@
 
 | File | Relative Path | What it tests |
 |---|---|---|
+| `test_journal_analyzer.py` | `tests/test_journal_analyzer.py` | Unit tests for session journal analyzer (F1–F10 features, parsing, consolidation, meetings, clean descriptions, skip logged, submit) |
 | `test_service.py` | `tests/test_service.py` | Unit tests for `TempoService` (logging, resolving, batching, health check, `MemoryJournal`, `NullJournal`) |
 | `test_cli.py` | `tests/test_cli.py` | Unit tests for core CLI parser and subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `doctor`) |
 | `test_cli_extended.py` | `tests/test_cli_extended.py` | Unit tests for extended CLI commands (`start`, `stop`, `status`, `summary`, `tui`, `auth`, `completion`, `git-hook`) |
+| `test_roadmap_features.py` | `tests/test_roadmap_features.py` | Unit tests for safety validation, duplicate filtering, and round-duration rules |
+| `test_safety.py` | `tests/test_safety.py` | Unit tests for time rounding, duplicate detection across existing worklogs, and daily cap warnings |
 | `test_timer.py` | `tests/test_timer.py` | Unit tests for live stopwatch timer (`start_timer`, `stop_timer`, `get_active_timer`, formatting) |
 | `test_sqlite_journal.py` | `tests/test_sqlite_journal.py` | Unit tests for `SQLiteJournal` querying, weekly aggregations, CSV export, and `DualJournal` |
 | `test_git_hook.py` | `tests/test_git_hook.py` | Unit tests for commit message regex parsing, hook installation, uninstallation, and execution |

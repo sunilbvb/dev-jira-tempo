@@ -21,11 +21,12 @@
   - [3. View worklogs (`list`)](#3-view-worklogs-list)
   - [4. Edit a worklog (`update`)](#4-edit-a-worklog-update)
   - [5. Batch upload from file (`batch`)](#5-batch-upload-from-file-batch)
+  - [6. Session Journal Analyzer (`analyze`)](#6-session-journal-analyzer-analyze)
 - [Python SDK Guide (Use in Your Own Apps)](#-python-sdk-guide-use-in-your-own-apps)
 - [📖 Detailed How-To Guide & Scenarios (USAGE.md)](USAGE.md)
 - [🤝 Contributing Guide & Roadmap (CONTRIBUTING.md)](CONTRIBUTING.md)
 - [🗂️ Project File Map & Line Index (FILES.md)](FILES.md)
-- [Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
+- [❓ Frequently Asked Questions (FAQ) (FAQ.md)](FAQ.md)
 - [Testing](#-testing)
 - [License](#-license)
 
@@ -167,6 +168,11 @@ tempo-log create --issue PROJ-123 --hours 2 --description "Initial project setup
 | `TEMPO_ROUND_MINUTES` | Optional | `15` | Increment in minutes to round up worklog durations (e.g. 15). |
 | `TEMPO_DEFAULT_ISSUE` | Optional | `PROJ-123` | Default issue key fallback for general worklogs. |
 | `TEMPO_MEETING_ISSUE` | Optional | `PROJ-456` | Fallback issue key for meeting worklogs. |
+| `TEMPO_DUPLICATE_WINDOW_MINUTES` | Optional | `15` | Window in minutes to detect matching worklogs in Tempo (default: 15). |
+| `TEMPO_FIXED_BLOCKS` | Optional | `13:00-14:00@LUNCH-1:Lunch` | Fixed daily blocks to reserve during sequential layout. |
+| `TEMPO_MEETING_PREFIX` | Optional | `Meeting:` | Prefix to identify meeting entries in journals (default: `Meeting:`). |
+| `TEMPO_DESCRIPTION_MAX_BULLETS` | Optional | `4` | Maximum bullet points per timesheet description (default: 4). |
+| `TEMPO_HEADING_TIME` | Optional | `start` | Heading timestamp mode (`start` or `end`, default: `start`). |
 | `TEMPO_LOG_JOURNAL` | Optional | `/path/to/log.jsonl` | Custom file path for the local audit log. Defaults to `~/.tempo-log/journal.jsonl`. |
 
 ---
@@ -266,7 +272,27 @@ tempo-log batch my-timesheet.json --stop-on-error
 
 ---
 
-### 6. Live Stopwatch / Timer Mode (`start`, `status`, `stop`)
+### 6. Session Journal Analyzer (`analyze`)
+
+Turn a day's markdown work journal into reviewable, uploadable timesheets with safety verification:
+
+```bash
+# Preview plan: checks tickets, rounding, meetings, skips already logged
+tempo-log analyze journal.md --date today --plan
+
+# Upload READY entries directly to Tempo (prompts confirmation, atomic rollback on failure)
+tempo-log analyze journal.md --date today --submit
+
+# Script mode: non-interactive upload
+tempo-log analyze journal.md --date today --submit --yes
+
+# Consolidate multiple micro-entries on the same ticket across the day
+tempo-log analyze journal.md --date today --consolidate day --submit
+```
+
+---
+
+### 7. Live Stopwatch / Timer Mode (`start`, `status`, `stop`)
 
 Track time dynamically as you work:
 ```bash
@@ -285,7 +311,7 @@ tempo-log stop --discard
 
 ---
 
-### 7. Interactive TUI Dashboard (`tui`)
+### 8. Interactive TUI Dashboard (`tui`)
 
 Launch an interactive terminal dashboard displaying active timers, today's work, weekly progress against targets, and keyboard shortcuts:
 ```bash
@@ -298,7 +324,7 @@ tempo-log tui --once
 
 ---
 
-### 8. Weekly Summary & SQLite Audit Backend (`summary`)
+### 9. Weekly Summary & SQLite Audit Backend (`summary`)
 
 Aggregates daily totals, issues breakdown, and exports to CSV:
 ```bash
@@ -311,7 +337,7 @@ tempo-log summary --export-csv timesheet_export.csv
 
 ---
 
-### 9. OS Keyring Secret Storage (`auth`)
+### 10. OS Keyring Secret Storage (`auth`)
 
 Securely store tokens in macOS Keychain, Linux Secret Service, or Windows Credential Vault instead of keeping plaintext tokens in `.env`:
 ```bash
@@ -327,7 +353,7 @@ tempo-log auth status
 
 ---
 
-### 10. Shell Tab-Completion (`completion`)
+### 11. Shell Tab-Completion (`completion`)
 
 Generate autocompletion scripts with dynamic issue key suggestions:
 ```bash
@@ -344,7 +370,7 @@ tempo-log completion --shell fish > ~/.config/fish/completions/tempo-log.fish
 
 ---
 
-### 11. Git Commit Auto-Worklog Hook (`git-hook`)
+### 12. Git Commit Auto-Worklog Hook (`git-hook`)
 
 Automatically log work whenever you commit code matching patterns like `PROJ-123: 1.5h - Description` or `#time 1h`:
 ```bash
@@ -360,7 +386,7 @@ tempo-log git-hook uninstall
 
 ---
 
-### 12. Jira Server & Data Center (On-Premise)
+### 13. Jira Server & Data Center (On-Premise)
 
 For Jira Server or Data Center with Personal Access Tokens (PAT):
 ```bash
@@ -446,6 +472,22 @@ Yes! Jira Server and Data Center on-premise deployments are supported via Person
 </p>
 </details>
 
+<details>
+<summary><b>5. How do I turn a markdown session journal into timesheets?</b></summary>
+<p>
+Run <code>tempo-log analyze journal.md --date today --plan</code> to preview the timesheet with automatic rounding, consolidation, and duplicate detection. When satisfied, run <code>tempo-log analyze journal.md --date today --submit</code> to upload.
+</p>
+</details>
+
+<details>
+<summary><b>6. What happens if an entry upload fails during --submit?</b></summary>
+<p>
+The submission is atomic: if any worklog fails to upload, all previously created worklogs in that run are automatically rolled back, leaving your timesheet clean.
+</p>
+</details>
+
+> 💡 **Have more questions?** See the full [FAQ.md](FAQ.md) for detailed explanations on duplicate matching, fixed blocks, meeting prefixes, and ticket mapping.
+
 ---
 
 ## 🧪 Testing
@@ -456,7 +498,7 @@ To run the automated test suite:
 pytest -v
 ```
 
-All 69 unit tests mock external network requests, so they run in less than **1.0 second** without needing real API tokens.
+All 108 unit tests mock external network requests, so they run quickly without needing real API tokens.
 
 ---
 
