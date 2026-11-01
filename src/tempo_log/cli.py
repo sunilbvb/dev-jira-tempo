@@ -11,12 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from .commands import (
-    run_batch,
-    run_create,
-    run_doctor,
     run_analyze,
+    run_batch,
+    run_calendar,
+    run_create,
+    run_day_report,
+    run_doctor,
+    run_export,
     run_from_worklog,
     run_list,
+    run_schedule,
+    run_share,
+    run_ticket_map,
     run_update,
 )
 from .completion import generate_completion, get_recent_issues
@@ -346,6 +352,65 @@ def build_parser() -> argparse.ArgumentParser:
     hook_check = hook_subparsers.add_parser("check", help="Dry-run parse a commit message.")
     hook_check.add_argument("msg", help="Commit message string to test.")
 
+    # 14. schedule
+    sched_parser = subparsers.add_parser("schedule", help="Build optimized day schedule from worklog/journal.")
+    sched_parser.add_argument("file", help="Path to markdown worklog or journal file.")
+    sched_parser.add_argument("-d", "--date", help="Target date (YYYY-MM-DD, default today).")
+    sched_parser.add_argument("--start", default="09:00", help="Day start time (default: 09:00).")
+    sched_parser.add_argument("--round", dest="round_minutes", type=int, default=15, help="Round-up step (default: 15).")
+    sched_parser.add_argument("--cap", dest="cap_hours", type=float, default=12.0, help="Max day hours (default: 12.0).")
+    sched_parser.add_argument("--break-start", default="13:00", help="Break start time (default: 13:00).")
+    sched_parser.add_argument("--break-minutes", type=int, default=60, help="Break duration in minutes (default: 60).")
+    sched_parser.add_argument("--break-issue", help="Jira issue key for break (e.g. LUNCH-1).")
+    sched_parser.add_argument("--break-desc", help="Description for break entry.")
+    sched_parser.add_argument("--reserve", action="append", metavar="HH:MM-HH:MM", help="Reserved slot (repeatable).")
+    sched_parser.add_argument("--json", action="store_true", help="Output schedule as JSON.")
+
+    # 15. day-report
+    report_parser = subparsers.add_parser("day-report", help="Audit one day of worklogs for gaps, overlaps, and cap limits.")
+    report_parser.add_argument("-d", "--date", help="Target date (YYYY-MM-DD, default today).")
+    report_parser.add_argument("--file", help="Optional local markdown file to analyze instead of Tempo API.")
+    report_parser.add_argument("--round-minutes", type=int, default=15, help="Rounding step minutes (default: 15).")
+    report_parser.add_argument("--cap-hours", type=float, default=12.0, help="Daily cap hours (default: 12.0).")
+    report_parser.add_argument("--json", action="store_true", help="Output audit as JSON.")
+
+    # 16. ticket-map
+    tm_parser = subparsers.add_parser("ticket-map", help="Manage persistent keyword-to-ticket mappings.")
+    tm_subparsers = tm_parser.add_subparsers(dest="map_action", required=True)
+    tm_list = tm_subparsers.add_parser("list", help="List active mappings.")
+    tm_list.add_argument("--json", action="store_true", help="Output as JSON.")
+    tm_add = tm_subparsers.add_parser("add", help="Add or update keyword mapping.")
+    tm_add.add_argument("--keyword", "-k", required=True, help="Keyword or phrase to match.")
+    tm_add.add_argument("--ticket", "-t", required=True, help="Jira ticket key (e.g. PROJ-123).")
+    tm_add.add_argument("--json", action="store_true", help="Output as JSON.")
+    tm_match = tm_subparsers.add_parser("match", help="Test match text against mappings.")
+    tm_match.add_argument("query", help="Text or task description to match.")
+    tm_match.add_argument("--json", action="store_true", help="Output as JSON.")
+
+    # 17. calendar
+    cal_parser = subparsers.add_parser("calendar", help="Parse iCalendar (.ics) files and sync meetings.")
+    cal_subparsers = cal_parser.add_subparsers(dest="calendar_action", required=True)
+    cal_parse = cal_subparsers.add_parser("parse", help="Parse .ics file into meetings.")
+    cal_parse.add_argument("file", help="Path to .ics file.")
+    cal_parse.add_argument("-d", "--date", help="Filter by date (YYYY-MM-DD).")
+    cal_parse.add_argument("--as-fixed-blocks", action="store_true", help="Format as TEMPO_FIXED_BLOCKS string.")
+    cal_parse.add_argument("--issue-key", default="MEETING", help="Jira issue key for meetings.")
+    cal_parse.add_argument("--json", action="store_true", help="Output as JSON.")
+
+    # 18. export
+    export_parser = subparsers.add_parser("export", help="Export timesheets to CSV, JSON, or printable HTML.")
+    export_parser.add_argument("--format", choices=["csv", "json", "html"], default="csv", help="Export format (default: csv).")
+    export_parser.add_argument("-o", "--output", help="Write export to destination file.")
+    export_parser.add_argument("--from-date", help="Filter from start date (YYYY-MM-DD).")
+    export_parser.add_argument("--to-date", help="Filter to end date (YYYY-MM-DD).")
+
+    # 19. share
+    share_parser = subparsers.add_parser("share", help="Share daily worklog digest to team chat webhooks.")
+    share_parser.add_argument("-d", "--date", help="Date to share (YYYY-MM-DD, default today).")
+    share_parser.add_argument("--webhook", help="Webhook URL (or TEMPO_SHARE_WEBHOOK env).")
+    share_parser.add_argument("--channel", help="Optional Slack/Teams channel name.")
+    share_parser.add_argument("--dry-run", action="store_true", help="Preview payload without sending.")
+
     return parser
 
 
@@ -598,6 +663,14 @@ def run_hook_command(args: argparse.Namespace, target: Settings | TempoService |
 
 def run(args: argparse.Namespace) -> int:
     # Commands that do NOT require API credentials or settings
+    if args.command == "ticket-map":
+        return run_ticket_map(args)
+    if args.command == "calendar":
+        return run_calendar(args)
+    if args.command == "schedule":
+        return run_schedule(args)
+    if args.command == "day-report" and getattr(args, "file", None):
+        return run_day_report(args)
     if args.command == "start":
         return run_start(args)
     if args.command == "status":
@@ -631,6 +704,12 @@ def run(args: argparse.Namespace) -> int:
         if args.command == "analyze" and not getattr(args, "submit", False):
             logger.warning("Tempo credentials not set; running analyze in offline mode.")
             return run_analyze(args, None)
+        if args.command == "day-report":
+            return run_day_report(args, None)
+        if args.command == "export":
+            return run_export(args, None)
+        if args.command == "share":
+            return run_share(args, None)
         logger.error(str(exc))
         return 1
 
@@ -652,6 +731,14 @@ def run(args: argparse.Namespace) -> int:
         return run_doctor(service)
     if args.command == "stop":
         return run_stop(args, service)
+    if args.command == "schedule":
+        return run_schedule(args, service)
+    if args.command == "day-report":
+        return run_day_report(args, service)
+    if args.command == "export":
+        return run_export(args, service)
+    if args.command == "share":
+        return run_share(args, service)
 
     logger.error("Unknown command: %s", args.command)
     return 1

@@ -452,4 +452,8 @@ tempo-log analyze journal.md --date today --submit --yes
 11. **Smart Cap Trimming (`--trim`)**: When total planned hours exceed `TEMPO_DAILY_CAP_HOURS`, automatically reduces excess duration starting from the shortest non-meeting tasks down to the cap, adjusts start times, and records original vs trimmed hours in the worklog description.
 12. **Multi-Day & Date-Range Analysis (`--all-dates`, `-d YYYY-MM-DD..YYYY-MM-DD`)**: Process journals across multiple days or a date range in one command, with unified reports and batch submission.
 13. **REST Web API (`POST /api/analyze` & `POST /api/analyze/submit`)**: Remotely parse, plan, and submit markdown worklogs via the embedded web console backend.
+14. **Automated Day Scheduler (`tempo-log schedule`)**: Lay out contiguous daily timelines snapped to 15-minute intervals with break reservation.
+15. **Gap & Overlap Analyzer (`tempo-log day-report`)**: Audit daily timelines for untracked gaps, overlapping blocks, and off-step increments.
+16. **Keyword Ticket Mapper (`tempo-log ticket-map`) & iCalendar Sync (`tempo-log calendar`)**: Manage persistent keyword mappings and parse RFC 5545 `.ics` files.
+17. **Timesheet Export (`tempo-log export`) & Team Sharing (`tempo-log share`)**: Generate printable HTML/CSV timesheets and share daily digests to Slack/Discord/Teams webhooks.
 

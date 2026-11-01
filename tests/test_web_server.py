@@ -234,4 +234,61 @@ def test_api_analyze_submit_endpoint(server, auth_headers):
         mock_service.batch_log.assert_called_once()
 
 
+def test_api_schedule_endpoint(server, auth_headers):
+    payload = {
+        "content": "## 2026-11-02 Feature\nTime: 09:00-10:00 (1h) | Ticket: PROJ-99\n- Did work",
+        "date": "2026-11-02",
+        "start": "09:00",
+        "round_minutes": 15
+    }
+    resp = requests.post(f"{server}/api/schedule", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["date"] == "2026-11-02"
+    assert data["total_hours"] == 1.0
+    assert len(data["items"]) == 1
+    assert data["items"][0]["issue"] == "PROJ-99"
+
+
+def test_api_day_report_endpoint(server, auth_headers):
+    payload = {
+        "content": "## 2026-11-02 Morning\nTime: 09:00-10:00 (1h) | Ticket: PROJ-1\n- A\n\n## 2026-11-02 Afternoon\nTime: 11:00-12:00 (1h) | Ticket: PROJ-2\n- B",
+        "date": "2026-11-02"
+    }
+    resp = requests.post(f"{server}/api/day-report", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["date"] == "2026-11-02"
+    assert data["total_hours"] == 2.0
+
+
+def test_api_ticket_map_endpoint(server, auth_headers, tmp_path):
+    # Add mapping
+    payload = {"keyword": "test-meeting", "ticket": "MEET-999"}
+    resp = requests.post(f"{server}/api/ticket-map", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+    # Get mappings
+    resp_get = requests.get(f"{server}/api/ticket-map", headers=auth_headers)
+    assert resp_get.status_code == 200
+    data = resp_get.json()
+    assert "mappings" in data
+    assert data["mappings"].get("test-meeting") == "MEET-999"
+
+
+def test_api_export_endpoint(server, auth_headers):
+    resp_csv = requests.get(f"{server}/api/export?format=csv", headers=auth_headers)
+    assert resp_csv.status_code == 200
+    assert "Date,Issue,Hours" in resp_csv.text
+
+    resp_json = requests.get(f"{server}/api/export?format=json", headers=auth_headers)
+    assert resp_json.status_code == 200
+    assert "total_items" in resp_json.json()
+
+    resp_html = requests.get(f"{server}/api/export?format=html", headers=auth_headers)
+    assert resp_html.status_code == 200
+    assert "<title>Tempo Timesheet Report</title>" in resp_html.text
+
+
 

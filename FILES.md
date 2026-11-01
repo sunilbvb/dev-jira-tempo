@@ -44,9 +44,10 @@
 
 | File | Relative Path | What it owns |
 |---|---|---|
-| `index.html` | `frontend/index.html` | **Single-page web dashboard** built with `developer-dashboard-ui` components (metrics, stopwatch, quick log, weekly summary, config modal) |
+| `index.html` | `frontend/index.html` | **Single-page web dashboard** built with `developer-dashboard-ui` components (metrics, stopwatch, interactive visual timeline, quick log, weekly summary, config modal) |
 | `ui.css` | `frontend/static/css/ui.css` | Bundled stylesheet from `developer-dashboard-ui` design tokens and components |
 | `app.js` | `frontend/static/js/app.js` | Vanilla JS application client managing live stopwatch, API calls, and reactive UI updates |
+| `timeline.js` | `frontend/static/js/modules/timeline.js` | **Interactive Day Timeline & Auto-Scheduler module** — draws 15-minute slot calendar blocks, highlights gaps/overlaps, runs auto-scheduling, and triggers HTML/CSV exports |
 
 ---
 
@@ -55,12 +56,25 @@
 | File | Relative Path | What it owns |
 |---|---|---|
 | `__init__.py` | `src/tempo_log/__init__.py` | **Public SDK entrypoint** — exports top-level public API (`TempoService`, `TempoClient`, `JiraClient`, `Worklog`, `BaseJournal`, `FileJournal`, `SQLiteJournal`, `DualJournal`, `TimerState`, `start_timer`, `stop_timer`, `run_server`, and exceptions) |
-| `web_server.py` | `src/tempo_log/web_server.py` | **Embedded REST API & static web server** — zero-dependency HTTP server delivering JSON endpoints (`/api/timer`, `/api/analyze`, `/api/analyze/submit`, etc.) and serving the frontend dashboard |
+| `web_server.py` | `src/tempo_log/web_server.py` | **Embedded REST API & static web server** — zero-dependency HTTP server delivering JSON endpoints (`/api/timer`, `/api/analyze`, `/api/schedule`, `/api/day-report`, `/api/export`, `/api/ticket-map`, `/api/share`) and serving the frontend dashboard |
 | `service.py` | `src/tempo_log/service.py` | **Core service facade (`TempoService`)** — central orchestrator for Jira key resolution, Tempo worklog creation, updates, listings, batch executions, dual journaling, and health checks |
-| `cli.py` | `src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `analyze`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`), routing, and terminal formatting |
+| `cli.py` | `src/tempo_log/cli.py` | **CLI presentation layer** — subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `analyze`, `doctor`, `start`, `stop`, `status`, `tui`, `summary`, `auth`, `completion`, `git-hook`, `schedule`, `day-report`, `ticket-map`, `calendar`, `export`, `share`), routing, and terminal formatting |
+| `schedule.py` | `src/tempo_log/schedule.py` | **Pure scheduling engine** — rounds durations up, lays out non-overlapping items back to back, handles fixed lunch/break reservation, and snaps start times |
+| `day_report.py` | `src/tempo_log/day_report.py` | **Day worklog gap & audit analyzer** — calculates daily totals, detects overlaps, finds untracked gaps, checks rounding step alignment, and daily cap compliance |
+| `worklog_import.py` | `src/tempo_log/worklog_import.py` | **Markdown worklog parser & consolidator** — parses `Time:` blocks with `(30m)` durations, groups entries by issue, consolidates bullets, and handles container blocks |
+| `ticket_mapper.py` | `src/tempo_log/ticket_mapper.py` | **Persistent keyword-to-ticket mapper** — loads, matches, and persists mappings in `.tempo-log/ticket-map.toml` using Python standard library |
+| `calendar_sync.py` | `src/tempo_log/calendar_sync.py` | **Pure stdlib iCalendar (.ics) parser** — parses `VEVENT` entries, computes durations and clock times, formats fixed blocks for scheduling |
+| `export.py` | `src/tempo_log/export.py` | **Timesheet export generator** — generates CSV, structured JSON, and standalone printable HTML reports with issue breakdown |
+| `sharing.py` | `src/tempo_log/sharing.py` | **Team digest sharing** — formats daily bulleted digest and posts to Slack, Discord, or Teams webhooks via stdlib `urllib` |
 | `journal_analyzer.py` | `src/tempo_log/journal_analyzer.py` | **Free-form session journal analyzer** — parses Markdown journals, consolidates micro-sessions, rounds durations, handles meetings, cleans descriptions, validates overlaps, auto-trims to daily cap, and detects existing worklogs |
-| `plugins.py` | `src/tempo_log/plugins.py` | **Plugin architecture & Ticket Mapper** — plugin hooks for ticket suggestions and meeting gap-checks, plus local `.tempo-log/ticket-map.toml` parser |
+| `plugins.py` | `src/tempo_log/plugins.py` | **Plugin architecture & Ticket Mapper hook** — plugin hooks for ticket suggestions and meeting gap-checks, plus ticket mapping integration |
 | `commands/analyze_cmd.py` | `src/tempo_log/commands/analyze_cmd.py` | **CLI handler for `analyze`** — runs single or multi-day journal reports, formats plan, coordinates `--submit`, date ranges, and `--trim` with atomic rollback |
+| `commands/schedule_cmd.py` | `src/tempo_log/commands/schedule_cmd.py` | **CLI handler for `schedule`** — builds optimized day schedule from markdown worklogs with break reservation |
+| `commands/day_report_cmd.py` | `src/tempo_log/commands/day_report_cmd.py` | **CLI handler for `day-report`** — audits one day of worklogs from Tempo API or local file for gaps and rule violations |
+| `commands/ticket_map_cmd.py` | `src/tempo_log/commands/ticket_map_cmd.py` | **CLI handler for `ticket-map`** — `list`, `add`, and `match` subcommands for keyword ticket mappings |
+| `commands/calendar_cmd.py` | `src/tempo_log/commands/calendar_cmd.py` | **CLI handler for `calendar`** — parses `.ics` files and formats meeting blocks |
+| `commands/export_cmd.py` | `src/tempo_log/commands/export_cmd.py` | **CLI handler for `export`** — exports timesheets to CSV, JSON, or printable HTML |
+| `commands/share_cmd.py` | `src/tempo_log/commands/share_cmd.py` | **CLI handler for `share`** — shares daily worklog digest to team chat webhooks |
 | `timer.py` | `src/tempo_log/timer.py` | **Live stopwatch timer** — local state tracking in `active_timer.json`, elapsed hours calculation, start/stop/status helpers |
 | `tui.py` | `src/tempo_log/tui.py` | **Interactive TUI Dashboard** — Rich & ANSI weekly summary, live timer visualization, and interactive keyboard command loop |
 | `keyring_store.py` | `src/tempo_log/keyring_store.py` | **OS Keyring Secret Storage** — Keychain / Secret Service / Windows Vault integration for secure credential storage without plaintext files |
@@ -80,6 +94,12 @@
 
 | File | Relative Path | What it tests |
 |---|---|---|
+| `test_schedule_cmd.py` | `tests/test_schedule_cmd.py` | Unit tests for `tempo-log schedule` CLI command, start time placement, and JSON output |
+| `test_day_report_cmd.py` | `tests/test_day_report_cmd.py` | Unit tests for `tempo-log day-report` CLI gap detection and audit rendering |
+| `test_ticket_mapper.py` | `tests/test_ticket_mapper.py` | Unit tests for `TicketMapper` load, add, save, match, and TOML serialization |
+| `test_calendar_sync.py` | `tests/test_calendar_sync.py` | Unit tests for RFC 5545 iCalendar parsing, date filtering, and fixed block formatting |
+| `test_export.py` | `tests/test_export.py` | Unit tests for timesheet CSV, JSON, and printable HTML generator |
+| `test_sharing.py` | `tests/test_sharing.py` | Unit tests for team webhook digest payload builder and Slack Block Kit formatting |
 | `test_journal_analyzer.py` | `tests/test_journal_analyzer.py` | Unit tests for session journal analyzer (F1–F10 features, parsing, consolidation, meetings, clean descriptions, skip logged, submit) |
 | `test_service.py` | `tests/test_service.py` | Unit tests for `TempoService` (logging, resolving, batching, health check, `MemoryJournal`, `NullJournal`) |
 | `test_cli.py` | `tests/test_cli.py` | Unit tests for core CLI parser and subcommands (`create`, `list`, `update`, `batch`, `from-worklog`, `doctor`) |

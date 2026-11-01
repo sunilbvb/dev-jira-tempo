@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import JiraConfig, Settings, load_settings
+from .day_report import DayEntry, analyse, render
 from .exceptions import TempoLogError, ValidationError
+from .export import ExportItem, generate_csv, generate_html, generate_json
 from .journal import DEFAULT_SQLITE_PATH, SQLiteJournal
 from .journal_analyzer import analyze_day, parse_fixed_blocks, parse_journal
 from .keyring_store import (
@@ -25,8 +27,12 @@ from .keyring_store import (
     is_keyring_available,
     set_credential,
 )
+from .schedule import Item, ScheduleConfig, build_day, format_clock, parse_clock, round_up
 from .service import TempoService
+from .sharing import build_digest_payload, send_webhook
+from .ticket_mapper import TicketMapper
 from .timer import get_active_timer, start_timer, stop_timer
+from .worklog_import import merge_by_issue, parse_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +121,15 @@ class TempoWebHandler(BaseHTTPRequestHandler):
             if path == "/api/export-csv":
                 self._handle_export_csv()
                 return
+            if path == "/api/export":
+                self._handle_get_export(query)
+                return
+            if path == "/api/day-report":
+                self._handle_get_day_report(query)
+                return
+            if path == "/api/ticket-map":
+                self._handle_get_ticket_map()
+                return
 
         # 2. Static File Serving
         self._serve_static(path)
@@ -153,6 +168,18 @@ class TempoWebHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/analyze/submit":
             self._handle_api_analyze_submit(body)
+            return
+        if path == "/api/schedule":
+            self._handle_post_schedule(body)
+            return
+        if path == "/api/day-report":
+            self._handle_post_day_report(body)
+            return
+        if path == "/api/ticket-map":
+            self._handle_post_ticket_map(body)
+            return
+        if path == "/api/share":
+            self._handle_post_share(body)
             return
 
         self._send_error("Endpoint not found", HTTPStatus.NOT_FOUND)
@@ -495,6 +522,240 @@ class TempoWebHandler(BaseHTTPRequestHandler):
             "failed": 0,
             "message": f"Successfully uploaded {succeeded} worklog(s) to Tempo.",
         })
+
+    def _collect_export_items(self, from_date: str | None, to_date: str | None) -> list[ExportItem]:
+        service = self._get_service()
+        items: list[ExportItem] = []
+        if service and service.tempo_client:
+            try:
+                today = datetime.date.today()
+                f_d = from_date or (today - datetime.timedelta(days=7)).isoformat()
+                t_d = to_date or today.isoformat()
+                logs = service.tempo_client.list_worklogs(from_date=f_d, to_date=t_d)
+                for w in logs:
+                    issue_info = w.get("issue", {})
+                    issue_key = issue_info.get("key") or str(issue_info.get("id", "UNKNOWN"))
+                    items.append(
+                        ExportItem(
+                            date=w.get("startDate", ""),
+                            issue=issue_key,
+                            hours=(w.get("timeSpentSeconds", 0) / 3600),
+                            start_time=w.get("startTime", "")[:5],
+                            tempo_id=w.get("tempoWorklogId", ""),
+                            description=w.get("description", ""),
+                        )
+                    )
+            except Exception as exc:
+                logger.warning("Could not fetch remote worklogs: %s", exc)
+
+        if not items:
+            j = SQLiteJournal()
+            logs = j.query(from_date=from_date, to_date=to_date, limit=200)
+            for w in logs:
+                items.append(
+                    ExportItem(
+                        date=w.get("start_date", ""),
+                        issue=w.get("issue_key") or str(w.get("issue_id", "UNKNOWN")),
+                        hours=float(w.get("hours", 0.0)),
+                        start_time=w.get("start_time", "")[:5],
+                        tempo_id=w.get("tempo_worklog_id", ""),
+                        description=w.get("description", ""),
+                    )
+                )
+        return items
+
+    def _handle_get_export(self, query: dict[str, list[str]]) -> None:
+        fmt = (query.get("format", ["csv"])[0]).lower()
+        from_date = query.get("from", [None])[0]
+        to_date = query.get("to", [None])[0]
+        items = self._collect_export_items(from_date, to_date)
+
+        if fmt == "json":
+            self._send_json(json.loads(generate_json(items)))
+            return
+        elif fmt == "html":
+            content = generate_html(items).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
+        else:
+            content = generate_csv(items).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="tempo_export.csv"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+    def _handle_get_day_report(self, query: dict[str, list[str]]) -> None:
+        target_date = query.get("date", [datetime.date.today().isoformat()])[0]
+        service = self._get_service()
+        round_minutes = service.settings.tempo_round_minutes if service and service.settings else 15
+        cap_hours = service.settings.tempo_daily_cap_hours if service and service.settings else 12.0
+
+        items = self._collect_export_items(target_date, target_date)
+        entries: list[DayEntry] = []
+        for idx, item in enumerate(items, 1):
+            start_m = parse_clock(item.start_time) if item.start_time else (idx * 30 + 540)
+            entries.append(
+                DayEntry(
+                    worklog_id=idx,
+                    start=start_m,
+                    minutes=int(round(item.hours * 60)),
+                    issue=item.issue,
+                    title=item.description.splitlines()[0] if item.description else "",
+                )
+            )
+
+        report = analyse(entries, round_minutes=round_minutes, max_day_minutes=int(cap_hours * 60))
+        rendered = render(report, max_day_minutes=int(cap_hours * 60))
+        self._send_json({
+            "date": target_date,
+            "total_minutes": report["total_minutes"],
+            "total_hours": report["total_minutes"] / 60,
+            "over_cap": report["over_cap"],
+            "overlaps": [f"{a.issue} & {b.issue}" for a, b in report["overlaps"]],
+            "gaps": [{"start": format_clock(g[0])[:5], "end": format_clock(g[1])[:5], "minutes": g[1] - g[0]} for g in report["gaps"]],
+            "off_step": [e.issue for e in report["off_step"]],
+            "rendered": rendered,
+        })
+
+    def _handle_get_ticket_map(self) -> None:
+        mapper = TicketMapper.load()
+        self._send_json({"mappings": mapper.mappings})
+
+    def _handle_post_schedule(self, body: dict[str, Any]) -> None:
+        content = body.get("content", "")
+        target_date = body.get("date") or datetime.date.today().isoformat()
+        step = int(body.get("round_minutes") or 15)
+        cap = float(body.get("cap_hours") or 12.0)
+        start_time = body.get("start") or "09:00"
+
+        if content:
+            blocks = parse_blocks(content, target_date)
+            merged = merge_by_issue(blocks)
+            items: list[Item] = []
+            for m in merged:
+                items.append(
+                    Item(
+                        issue=m.issue or "UNASSIGNED",
+                        minutes=round_up(m.minutes, step),
+                        description=m.description().strip(),
+                        fixed_start=m.fixed_start,
+                    )
+                )
+        else:
+            raw_items = body.get("items", [])
+            items = [
+                Item(
+                    issue=i.get("issue", "TASK"),
+                    minutes=round_up(float(i.get("minutes") or (float(i.get("hours", 1.0)) * 60)), step),
+                    description=i.get("description", ""),
+                    fixed_start=parse_clock(i["fixed_start"]) if i.get("fixed_start") else None,
+                )
+                for i in raw_items
+            ]
+
+        config = ScheduleConfig(
+            start_candidates=(start_time,),
+            round_minutes=step,
+            max_day_minutes=int(cap * 60),
+            break_issue=body.get("break_issue"),
+            break_start=body.get("break_start") or "13:00",
+            break_minutes=int(body.get("break_minutes") or 60),
+            break_description=body.get("break_desc") or "Lunch:\n- Lunch break",
+        )
+
+        reserved: list[tuple[int, int]] = []
+        for r in body.get("reserved", []):
+            try:
+                s_s, e_s = r.split("-", 1)
+                reserved.append((parse_clock(s_s.strip()), parse_clock(e_s.strip())))
+            except Exception:
+                pass
+
+        try:
+            scheduled = build_day(items, config, reserved=reserved if reserved else None)
+        except Exception as exc:
+            self._send_error(str(exc), HTTPStatus.BAD_REQUEST)
+            return
+
+        out = {
+            "date": target_date,
+            "total_minutes": sum(i.minutes for i in scheduled),
+            "total_hours": round(sum(i.minutes for i in scheduled) / 60, 2),
+            "items": [
+                {
+                    "issue": str(i.issue),
+                    "minutes": i.minutes,
+                    "hours": round(i.hours, 2),
+                    "start": format_clock(i.start)[:5] if i.start is not None else "--:--",
+                    "end": format_clock(i.start + i.minutes)[:5] if i.start is not None else "--:--",
+                    "description": i.description,
+                }
+                for i in scheduled
+            ],
+        }
+        self._send_json(out)
+
+    def _handle_post_day_report(self, body: dict[str, Any]) -> None:
+        content = body.get("content", "")
+        target_date = body.get("date") or datetime.date.today().isoformat()
+        blocks = parse_blocks(content, target_date) if content else []
+        entries: list[DayEntry] = []
+        for idx, b in enumerate(blocks, 1):
+            start_m = b.start_minute if b.start_minute is not None else (idx * 30 + 540)
+            entries.append(
+                DayEntry(
+                    worklog_id=idx,
+                    start=start_m,
+                    minutes=b.minutes,
+                    issue=str(b.issue or "UNASSIGNED"),
+                    title=b.title,
+                )
+            )
+        step = int(body.get("round_minutes") or 15)
+        cap = float(body.get("cap_hours") or 12.0)
+        report = analyse(entries, round_minutes=step, max_day_minutes=int(cap * 60))
+        rendered = render(report, max_day_minutes=int(cap * 60))
+        self._send_json({
+            "date": target_date,
+            "total_minutes": report["total_minutes"],
+            "total_hours": round(report["total_minutes"] / 60, 2),
+            "over_cap": report["over_cap"],
+            "rendered": rendered,
+        })
+
+    def _handle_post_ticket_map(self, body: dict[str, Any]) -> None:
+        kw = (body.get("keyword") or "").strip().lower()
+        ticket = (body.get("ticket") or "").strip().upper()
+        if not kw or not ticket:
+            self._send_error("Provide 'keyword' and 'ticket'", HTTPStatus.BAD_REQUEST)
+            return
+        mapper = TicketMapper.load()
+        mapper.add_mapping(kw, ticket)
+        saved = mapper.save()
+        self._send_json({"status": "ok", "keyword": kw, "ticket": ticket, "file": str(saved)})
+
+    def _handle_post_share(self, body: dict[str, Any]) -> None:
+        target_date = body.get("date") or datetime.date.today().isoformat()
+        webhook_url = body.get("webhook") or os.getenv("TEMPO_SHARE_WEBHOOK")
+        if not webhook_url:
+            self._send_error("Webhook URL required (or set TEMPO_SHARE_WEBHOOK)", HTTPStatus.BAD_REQUEST)
+            return
+        items = self._collect_export_items(target_date, target_date)
+        if not items:
+            self._send_error(f"No worklog entries found to share for {target_date}", HTTPStatus.NOT_FOUND)
+            return
+        payload = build_digest_payload(target_date, items, channel=body.get("channel"))
+        success, msg = send_webhook(webhook_url, payload)
+        if success:
+            self._send_json({"status": "ok", "message": msg})
+        else:
+            self._send_error(f"Webhook error: {msg}", HTTPStatus.BAD_GATEWAY)
 
     def _serve_static(self, path: str) -> None:
         static_dir = get_static_dir()

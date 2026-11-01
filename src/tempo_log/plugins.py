@@ -22,6 +22,8 @@ except ImportError:
     except ImportError:
         tomllib = None  # type: ignore[assignment]
 
+from .ticket_mapper import TicketMapper
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,41 +47,6 @@ class MeetingCandidate:
     end: str
     minutes: int
     attended: bool = True
-
-
-class TicketMapper:
-    """Maps keywords to tickets based on local configuration file."""
-
-    def __init__(self, mappings: dict[str, str] | None = None) -> None:
-        self.mappings: dict[str, str] = mappings or {}
-
-    @classmethod
-    def load(cls, custom_path: Path | str | None = None) -> TicketMapper:
-        candidates = []
-        if custom_path:
-            candidates.append(Path(custom_path).expanduser())
-        else:
-            candidates.append(Path.cwd() / ".tempo-log" / "ticket-map.toml")
-            candidates.append(Path.home() / ".tempo-log" / "ticket-map.toml")
-
-        for path in candidates:
-            if path.is_file() and tomllib:
-                try:
-                    data = tomllib.loads(path.read_text(encoding="utf-8"))
-                    maps = data.get("mappings", data)
-                    return cls({str(k).lower(): str(v) for k, v in maps.items()})
-                except Exception as exc:
-                    logger.warning("Could not parse ticket map at %s: %s", path, exc)
-
-        return cls()
-
-    def match(self, text: str) -> str | None:
-        """Find matching ticket for text keywords."""
-        low = text.lower()
-        for kw, ticket in self.mappings.items():
-            if kw in low:
-                return ticket
-        return None
 
 
 def get_plugin_hooks() -> list[Any]:

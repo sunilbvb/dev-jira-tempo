@@ -6,6 +6,10 @@
 
 > **A fast, simple tool to log work time to Tempo (Jira) directly from your terminal or Python code.**
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="tempo-log CLI Demo" width="750">
+</p>
+
 ---
 
 ## 📌 Table of Contents
@@ -408,6 +412,65 @@ export JIRA_API_TOKEN="your-personal-access-token"
 export JIRA_SERVER=true
 ```
 The client automatically switches to Bearer PAT authentication and Jira API v2 endpoints.
+
+---
+
+### 14. Day Schedule Optimizer (`schedule`)
+
+Lay out an entire day's work items back-to-back without overlapping, automatically snapping to 15-minute increments and respecting lunch/break reservations:
+```bash
+# Auto-schedule from worklog with 13:00 lunch break
+tempo-log schedule worklog.md --date 2026-11-02 --start 09:00 --break-issue LUNCH-1 --break-start 13:00
+
+# Reserve specific meeting blocks and output as JSON
+tempo-log schedule worklog.md --reserve 14:00-15:00 --reserve 16:30-17:00 --json
+```
+
+---
+
+### 15. Daily Worklog Gap & Overlap Audit (`day-report`)
+
+Audit a full day of time tracking (from Tempo API or local markdown), detecting untracked gaps, collisions, non-standard rounding steps, and daily cap compliance:
+```bash
+# Audit today's remote Tempo worklogs
+tempo-log day-report --date today
+
+# Audit a local journal file for gaps
+tempo-log day-report --file journal.md --date 2026-11-02 --json
+```
+
+---
+
+### 16. Smart Keyword Ticket Mapper (`ticket-map`) & Calendar Sync (`calendar`)
+
+Map recurring journal phrases to Jira tickets automatically, and extract meetings from standard `.ics` calendar files:
+```bash
+# Persistent keyword mapping in .tempo-log/ticket-map.toml
+tempo-log ticket-map add --keyword "standup" --ticket "MEET-101"
+tempo-log ticket-map match "Attended morning standup"
+tempo-log ticket-map list
+
+# Pure standard library RFC 5545 iCalendar sync
+tempo-log calendar parse calendar.ics --date today
+tempo-log calendar parse calendar.ics --as-fixed-blocks
+```
+
+---
+
+### 17. Timesheet Export (`export`) & Team Webhook Digest (`share`)
+
+Export timesheets to clean CSV, JSON, or standalone printable HTML reports, and post daily digests to team chat:
+```bash
+# Export printable HTML report with hours breakdown by issue
+tempo-log export --format html -o timesheet.html
+
+# Export CSV for billing/payroll
+tempo-log export --format csv --from-date 2026-11-01 --to-date 2026-11-07
+
+# Post daily summary digest to Slack, Discord, or Teams webhook
+tempo-log share --date today --webhook "https://hooks.slack.com/services/..."
+tempo-log share --dry-run
+```
 
 ---
 
